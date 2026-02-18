@@ -1,0 +1,725 @@
+/* ============================================================
+   SRT Workbench – Professional UI Stylesheet
+   ============================================================ */
+
+/* — Design tokens ------------------------------------------- */
+:root {
+  --bg:          #f4f6f9;
+  --bg-2:        #eaeff5;
+  --panel:       #ffffff;
+  --panel-hover: #fafbfd;
+  --ink:         #1a1f25;
+  --ink-soft:    #3b434d;
+  --muted:       #6b7685;
+  --faint:       #a0aab5;
+  --line:        #dce2ea;
+  --line-light:  #e9eef4;
+  --brand:       #2563eb;
+  --brand-hover: #1d4ed8;
+  --brand-soft:  #dbeafe;
+  --brand-muted: #93bbfd;
+  --accent:      #0d9488;
+  --accent-soft: #ccfbf1;
+  --danger:      #dc2626;
+  --danger-soft: #fef2f2;
+  --success:     #16a34a;
+  --success-soft:#f0fdf4;
+  --warning-soft:#fffbeb;
+  --shadow-sm:   0 1px 2px rgba(0,0,0,.05);
+  --shadow:      0 4px 24px rgba(0,0,0,.07);
+  --shadow-lg:   0 12px 48px rgba(0,0,0,.10);
+  --radius:      12px;
+  --radius-sm:   8px;
+  --radius-xs:   6px;
+  --ease:        cubic-bezier(.4,0,.2,1);
+}
+
+/* — Reset & base -------------------------------------------- */
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--ink);
+  background: var(--bg);
+  font-family: "Inter", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 14px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background: var(--brand-soft);
+  color: var(--ink);
+}
+
+/* — Layout shell -------------------------------------------- */
+.layout {
+  max-width: 1060px;
+  margin: 0 auto;
+  padding: 24px 20px 48px;
+}
+
+.review-layout {
+  max-width: 1320px;
+}
+
+/* — Navigation ---------------------------------------------- */
+.app-nav {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 24px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 4px;
+  box-shadow: var(--shadow-sm);
+}
+
+.nav-item {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 13px;
+  transition: all .15s var(--ease);
+  border: 1px solid transparent;
+}
+
+.nav-item:hover {
+  color: var(--ink);
+  background: var(--bg);
+}
+
+.nav-item.active {
+  color: var(--ink);
+  background: var(--panel);
+  border-color: var(--line);
+  box-shadow: var(--shadow-sm);
+}
+
+.nav-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-xs);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: .02em;
+  flex-shrink: 0;
+}
+
+.nav-item.active .nav-icon {
+  background: var(--brand);
+  color: #fff;
+}
+
+.nav-item:not(.active) .nav-icon {
+  background: var(--bg);
+  color: var(--muted);
+  border: 1px solid var(--line-light);
+}
+
+/* — Topbar / Header ----------------------------------------- */
+.topbar {
+  margin-bottom: 24px;
+}
+
+.topbar h1 {
+  margin: 2px 0 0;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -.02em;
+}
+
+.eyebrow {
+  margin: 0;
+  color: var(--brand);
+  font-size: 11px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.muted {
+  color: var(--muted);
+  margin: 0;
+  font-size: 13px;
+}
+
+.topbar .muted {
+  margin-top: 4px;
+}
+
+/* — Panels -------------------------------------------------- */
+.panel {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: var(--shadow-sm);
+  padding: 20px;
+}
+
+.panel + .panel {
+  margin-top: 16px;
+}
+
+.panel h2 {
+  margin: 0 0 16px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -.01em;
+}
+
+/* — Media-root directory bar -------------------------------- */
+.media-root-panel {
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  background: var(--bg);
+  border-color: var(--line-light);
+}
+
+.media-root-form {
+  display: flex;
+  gap: 10px;
+  align-items: end;
+}
+
+.media-root-form .field {
+  flex: 1;
+}
+
+.media-root-form .button-row {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+/* — Form elements ------------------------------------------- */
+.form-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+label {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+select,
+input[type="file"],
+input[type="text"],
+input,
+textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  color: var(--ink);
+  padding: 9px 12px;
+  font: inherit;
+  font-size: 13px;
+  transition: border-color .15s var(--ease), box-shadow .15s var(--ease);
+}
+
+select:focus,
+input:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--brand-muted);
+  box-shadow: 0 0 0 3px var(--brand-soft);
+}
+
+textarea {
+  resize: vertical;
+  min-height: 72px;
+  line-height: 1.5;
+}
+
+input[type="file"] {
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+input[type="file"]::file-selector-button {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  background: var(--bg);
+  color: var(--ink-soft);
+  padding: 5px 12px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-right: 10px;
+  transition: background .15s var(--ease);
+}
+
+input[type="file"]::file-selector-button:hover {
+  background: var(--line-light);
+}
+
+/* — Buttons ------------------------------------------------- */
+button,
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: auto;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: var(--brand);
+  color: #fff;
+  padding: 9px 18px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: all .15s var(--ease);
+}
+
+button:hover,
+.button:hover {
+  background: var(--brand-hover);
+  box-shadow: var(--shadow-sm);
+}
+
+button:active,
+.button:active {
+  transform: scale(.98);
+}
+
+button:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.button.ghost,
+button.ghost {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  color: var(--ink-soft);
+}
+
+.button.ghost:hover,
+button.ghost:hover {
+  background: var(--bg);
+  border-color: var(--line);
+}
+
+/* — Generate form specifics --------------------------------- */
+.form-grid .form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.form-grid .or-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--faint);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+}
+
+.form-grid .or-divider::before,
+.form-grid .or-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--line-light);
+}
+
+.form-grid .form-actions {
+  display: flex;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+.form-grid .form-actions button,
+.form-grid .form-actions .button {
+  flex: 1;
+}
+
+/* — Flash messages ------------------------------------------ */
+.flash-wrap {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.flash {
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  border: 1px solid;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.flash.success {
+  border-color: #86efac;
+  background: var(--success-soft);
+  color: #15803d;
+}
+
+.flash.error {
+  border-color: #fca5a5;
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+/* — Controls panel (Review page selectors) ------------------ */
+.controls-panel {
+  padding: 14px 16px;
+  background: var(--bg);
+  border-color: var(--line-light);
+}
+
+.controls-grid {
+  display: flex;
+  gap: 10px;
+  align-items: end;
+  flex-wrap: wrap;
+}
+
+.controls-grid .field {
+  flex: 1;
+  min-width: 160px;
+}
+
+.controls-grid-wide .field {
+  min-width: 140px;
+}
+
+/* — Review grid (video + editor) ---------------------------- */
+.review-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(340px, 0.85fr);
+  gap: 16px;
+  margin-top: 16px;
+  align-items: start;
+}
+
+/* — Video panel --------------------------------------------- */
+.video-panel {
+  position: sticky;
+  top: 20px;
+  padding: 12px;
+}
+
+#reviewVideo {
+  width: 100%;
+  border-radius: var(--radius-sm);
+  background: #0c1117;
+  display: block;
+}
+
+.video-meta {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 2px;
+}
+
+.file-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--bg);
+}
+
+.file-chip::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--success);
+  flex-shrink: 0;
+}
+
+#saveStatus {
+  font-size: 12px;
+  font-weight: 500;
+}
+
+#saveStatus.warn {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+/* — Editor panel (cue list) --------------------------------- */
+.editor-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.editor-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.editor-head h2 {
+  margin: 0;
+}
+
+.editor-head #saveBtn {
+  min-width: 110px;
+}
+
+.editor-head + .muted {
+  margin-bottom: 12px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+/* — Cue list ------------------------------------------------ */
+.cue-list {
+  overflow-y: auto;
+  max-height: calc(100vh - 280px);
+  padding-right: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  /* Scrollbar styling */
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) transparent;
+}
+
+.cue-list::-webkit-scrollbar {
+  width: 5px;
+}
+
+.cue-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.cue-list::-webkit-scrollbar-thumb {
+  background: var(--line);
+  border-radius: 999px;
+}
+
+/* — Individual cue rows ------------------------------------- */
+.cue-row {
+  border: 1px solid var(--line-light);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  background: var(--panel);
+  display: grid;
+  gap: 6px;
+  transition: border-color .15s var(--ease), box-shadow .15s var(--ease), background .15s var(--ease);
+}
+
+.cue-row:hover {
+  border-color: var(--line);
+  background: var(--panel-hover);
+}
+
+.cue-row.active {
+  border-color: var(--brand);
+  background: #f0f6ff;
+  box-shadow: 0 0 0 2px var(--brand-soft);
+}
+
+.cue-row-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.idx {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  border: none;
+}
+
+.cue-row.active .idx {
+  background: var(--brand);
+  color: #fff;
+}
+
+.mini-btn {
+  width: auto;
+  font-size: 11px;
+  padding: 4px 10px;
+  background: var(--panel);
+  color: var(--brand);
+  border: 1px solid var(--brand-soft);
+  border-radius: var(--radius-xs);
+  font-weight: 600;
+}
+
+.mini-btn:hover {
+  background: var(--brand-soft);
+  border-color: var(--brand-muted);
+  box-shadow: none;
+}
+
+.time-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+.time-grid input {
+  padding: 6px 8px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-family: "SF Mono", "Fira Code", "Cascadia Code", monospace;
+  text-align: center;
+}
+
+.cue-row textarea {
+  min-height: 52px;
+  font-size: 13px;
+  padding: 7px 10px;
+}
+
+/* — Loading spinner ----------------------------------------- */
+.spinner-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: rgba(244, 246, 249, .85);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid var(--line);
+  border-top-color: var(--brand);
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.spinner-overlay p {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* — Footer -------------------------------------------------- */
+.app-footer {
+  margin-top: 32px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line-light);
+  text-align: center;
+  font-size: 11px;
+  color: var(--faint);
+  letter-spacing: .01em;
+}
+
+/* — Section labels inside forms ----------------------------- */
+.section-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-soft);
+  margin: 0;
+  padding-bottom: 2px;
+}
+
+/* — Responsive ---------------------------------------------- */
+@media (max-width: 980px) {
+  .app-nav {
+    flex-direction: column;
+  }
+
+  .controls-grid {
+    flex-direction: column;
+  }
+
+  .controls-grid .field {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .media-root-form {
+    flex-direction: column;
+  }
+
+  .media-root-form .button-row {
+    width: 100%;
+  }
+
+  .review-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .video-panel {
+    position: static;
+  }
+
+  .editor-panel {
+    min-height: 0;
+  }
+
+  .cue-list {
+    max-height: none;
+  }
+
+  .form-grid .form-row {
+    grid-template-columns: 1fr;
+  }
+}

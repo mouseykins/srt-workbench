@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Review &amp; Edit | SRT Workbench</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  </head>
+  <body>
+    <main class="layout review-layout">
+      <!-- Navigation -->
+      <nav class="app-nav" aria-label="Primary">
+        <a href="{{ url_for('index', media_dir=media_dir) }}" class="nav-item {% if active_page == 'generate' %}active{% endif %}">
+          <span class="nav-icon" aria-hidden="true">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          </span>
+          <span>Generate</span>
+        </a>
+        <a href="{{ url_for('review', media_dir=media_dir) }}" class="nav-item {% if active_page == 'review' %}active{% endif %}">
+          <span class="nav-icon" aria-hidden="true">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 12h4M14 12h4"/></svg>
+          </span>
+          <span>Review &amp; Edit</span>
+        </a>
+      </nav>
+
+      <!-- Header -->
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">SRT Workbench</p>
+          <h1>Review &amp; Edit</h1>
+        </div>
+      </header>
+
+      <!-- Controls bar -->
+      <section class="panel controls-panel">
+        <form action="{{ url_for('review') }}" method="get" class="controls-grid controls-grid-wide">
+          <input type="hidden" name="return_to" value="review" />
+
+          <div class="field">
+            <label for="video_path">Video</label>
+            <select id="video_path" name="video_path" required>
+              {% for video in videos %}
+              <option value="{{ video.path }}" {% if video.path == selected_video %}selected{% endif %}>{{ video.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="srt_path">Subtitle File</label>
+            <select id="srt_path" name="srt_path" required>
+              {% for srt in srts %}
+              <option value="{{ srt.path }}" {% if srt.path == selected_srt %}selected{% endif %}>{{ srt.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="media_dir_review">Media Directory</label>
+            <input id="media_dir_review" type="text" name="media_dir" value="{{ media_dir }}" placeholder="/path/to/media/folder" />
+          </div>
+
+          <button type="submit">Load</button>
+          <button type="submit" class="ghost" formaction="{{ url_for('pick_directory') }}" formmethod="post">
+            Browse&hellip;
+          </button>
+        </form>
+      </section>
+
+      {% if selected_video and selected_srt %}
+      <!-- Video + Editor grid -->
+      <section class="review-grid">
+        <article class="panel video-panel">
+          <video id="reviewVideo" controls preload="metadata">
+            <source src="{{ url_for('media', file=selected_video, media_dir=media_dir) }}" />
+            <track
+              id="reviewTrack"
+              kind="captions"
+              src="{{ url_for('captions', file=selected_srt, media_dir=media_dir) }}"
+              srclang="en"
+              label="English"
+              default
+            />
+            Your browser does not support HTML5 video.
+          </video>
+          <div class="video-meta">
+            <span class="file-chip">{{ selected_srt_name }}</span>
+            <span id="saveStatus" class="muted">Ready</span>
+          </div>
+        </article>
+
+        <aside class="panel editor-panel">
+          <div class="editor-head">
+            <h2>Cue Editor</h2>
+            <button id="saveBtn" type="button">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+              Save SRT
+            </button>
+          </div>
+
+          <p class="muted">Edit text and timing below. The active cue highlights as the video plays.</p>
+
+          <div id="cueList" class="cue-list"></div>
+        </aside>
+      </section>
+      {% else %}
+      <section class="panel">
+        <p class="muted" style="text-align:center;padding:24px 0">Select a video and subtitle file above, then click <strong>Load</strong> to begin reviewing.</p>
+      </section>
+      {% endif %}
+
+      <footer class="app-footer">
+        SRT Workbench &middot; CTC Forced Alignment via wav2vec2
+      </footer>
+    </main>
+
+    <script>
+      window.CAPTION_EDITOR = {
+        srtPath: {{ selected_srt|tojson }},
+        mediaDir: {{ media_dir|tojson }},
+        cues: {{ cues_data|tojson }}
+      };
+    </script>
+    <script src="{{ url_for('static', filename='player.js') }}"></script>
+  </body>
+</html>

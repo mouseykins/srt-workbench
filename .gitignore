@@ -1,0 +1,28 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# App runtime directories (contain user files, not code)
+uploads/
+media/
+assets/
+bin/
+
+# Large model file (auto-downloaded on first run to ~/ctc_forced_aligner/)
+*.onnx
+
+# Claude Code
+.claude/
+
+# Secrets
+.env
+*.env
