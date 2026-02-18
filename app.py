@@ -73,7 +73,10 @@ def _resolve_media_dir(raw_value: str | None) -> tuple[Path, bool]:
 def _get_active_media_dir(raw_value: str | None) -> tuple[Path, bool]:
     requested = (raw_value or "").strip()
     if not requested:
-        requested = (session.get("media_dir") or "").strip()
+        # Only use the session value if the path actually exists on this machine
+        session_val = (session.get("media_dir") or "").strip()
+        if session_val and Path(session_val).expanduser().is_dir():
+            requested = session_val
     media_dir, invalid = _resolve_media_dir(requested)
     session["media_dir"] = str(media_dir)
     return media_dir, invalid
