@@ -1,169 +1,110 @@
 # SRT Workbench
 
-A local web app for generating accurately timed SRT caption files from a video and its written script. Built for technical education videos where standard transcription services mangle terminology — because you supply the ground-truth script, every technical term, spelling, and capitalisation comes out exactly right.
+A native macOS app that generates accurately timed SRT subtitle files from video and a ground-truth script (.docx). Uses CTC forced alignment with a wav2vec2 ONNX model to produce word-level timestamps (~50ms accuracy), then groups words into subtitle-sized cues.
 
----
+Unlike speech-to-text transcription, this approach uses your original script as the source of truth, so technical terms, proper nouns, and domain-specific language are always correct.
 
-## How it works
+## Features
 
-Most transcription services do speech-to-text and get technical terms wrong. This tool flips that: you provide the correct text, and the app works out *when* each word is spoken.
-
-It uses **CTC forced alignment** (a wav2vec2 speech recognition model running locally via ONNX) to match your script against the audio frame-by-frame, producing word-level timestamps accurate to ~50ms. Long lines are automatically split into subtitle-length chunks (≤4.5 seconds each).
-
-**Pipeline:**
-1. Extract audio from the video (ffmpeg)
-2. Run CTC forced alignment against your script (ctc-forced-aligner)
-3. Map word timestamps back to script lines, splitting where needed
-4. Output a ready-to-use `.srt` file
-
----
+- **Generate tab** — Pick a video and .docx script, run alignment, get a timed SRT file
+- **Review tab** — Play video with caption overlay, edit cue timecodes and text, save changes
+- **2x playback speed** — Toggle with toolbar button or keyboard shortcut
+- **Checklist progress** — Visual step-by-step progress during alignment
+- **Auto-setup** — First launch creates a Python environment and downloads the alignment model automatically
 
 ## Requirements
 
-| Dependency | Notes |
-|---|---|
-| **Python 3.10+** | 3.10 recommended; 3.13 has build issues with some dependencies |
-| **ffmpeg** | For audio extraction |
-| **~1.2 GB disk space** | For the alignment model (auto-downloaded on first run to `~/ctc_forced_aligner/`) |
+- **macOS 14 (Sonoma)** or later
+- **Python 3.10+** — Install via [Homebrew](https://brew.sh): `brew install python@3.12`
+- **XcodeGen** — To generate the Xcode project: `brew install xcodegen`
+- **Xcode 15+** — To build the app
+- ~1.5 GB disk space for the alignment model (downloaded on first launch)
 
-Python packages (installed automatically by setup):
-- `Flask` — web UI
-- `ctc-forced-aligner` — forced alignment engine
-- `python-docx` — reads `.docx` script files
-- `Unidecode` — text normalisation for the aligner
-
----
-
-## Setup (macOS)
-
-### Option A — Double-click launcher (easiest)
+## Build from Source
 
 ```bash
-# First time only
-./setup.command    # creates .venv and installs dependencies
-
-# Every time after
-./run.command      # starts the app and opens http://127.0.0.1:5050
-```
-
-Both scripts are in the root of the repo. macOS may ask you to confirm running them the first time — right-click → Open if so.
-
-### Option B — Terminal
-
-```bash
-# Install system dependencies (once)
-brew install ffmpeg python@3.10
-
-# Create virtual environment and install packages (once)
-python3.10 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-
-# Run
-python app.py
-```
-
-Then open **http://127.0.0.1:5050** in your browser.
-
----
-
-## Using the app
-
-### Generate page
-
-1. Set your **Media Directory** — the folder where your videos and scripts live (the app will scan it for supported files)
-2. Select a **video** and its matching **script** (.docx) — or upload them directly
-3. Click **Run Alignment** — a spinner shows while processing (typically 1–3 minutes depending on video length)
-4. When done, the app automatically takes you to the Review & Edit page
-
-### Review & Edit page
-
-- The video plays with captions overlaid
-- The **Cue Editor** panel lists every subtitle entry with editable text and timestamps
-- The active cue highlights automatically as the video plays
-- Click **Jump** on any cue to seek the video to that point
-- Edit any text or timing directly in the fields
-- Click **Save SRT** to write changes back to the file
-
-### Getting your SRT file
-
-Generated files are saved to the `uploads/` folder inside the project directory. Copy the `.srt` file from there to wherever you need it.
-
----
-
-## Script format (.docx)
-
-- One paragraph per spoken section
-- Lines in **[square brackets]** are treated as stage directions and skipped (e.g. `[Cut to diagram]`)
-- Empty paragraphs are ignored
-- Everything else is treated as spoken dialogue — use exactly the spelling, capitalisation, and terminology you want in the captions
-
----
-
-## Project structure
-
-```
-srt-workbench/
-├── app.py              # Flask app — routes, file handling, SRT save/serve
-├── generate_srt.py     # Core pipeline: audio extraction + CTC alignment
-├── requirements.txt    # Python dependencies
-├── setup.command       # macOS one-click setup script
-├── run.command         # macOS one-click launch script
-├── templates/
-│   ├── index.html      # Generate page
-│   └── player.html     # Review & Edit page
-└── static/
-    ├── style.css       # UI styles
-    └── player.js       # Cue editor, video sync, save logic
-```
-
-**Not in the repo** (created locally or downloaded automatically):
-- `.venv/` — Python virtual environment (~500MB)
-- `media/` — your media files (point the app at wherever these live)
-- `uploads/` — temporary files and generated SRTs
-- `~/ctc_forced_aligner/model.onnx` — alignment model (~1.2GB, auto-downloaded)
-
----
-
-## Git workflow
-
-### Pushing changes (from any machine)
-
-```bash
-git add -A
-git commit -m "describe what changed"
-git push
-```
-
-### Pulling updates (on another machine)
-
-```bash
-git pull
-```
-
-### Setting up on a new machine
-
-```bash
-brew install gh git
-gh auth login
+# Clone the repo
 git clone https://github.com/mouseykins/srt-workbench.git
 cd srt-workbench
-./setup.command
-./run.command
+
+# Generate the Xcode project
+xcodegen generate
+
+# Open in Xcode and build (Cmd+B), or build from command line:
+xcodebuild -project SRTWorkbench.xcodeproj -scheme SRTWorkbench -configuration Release
 ```
 
----
+To create a distributable DMG:
 
-## Troubleshooting
+```bash
+Scripts/create_dmg.sh
+```
 
-**ffmpeg not found**
-Install via Homebrew (`brew install ffmpeg`), or place an ffmpeg binary at `./bin/ffmpeg` inside the project folder and `run.command` will find it automatically.
+## First Launch
 
-**"Alignment model downloading" takes a long time**
-The wav2vec2 ONNX model is ~1.2GB and only downloads once, to `~/ctc_forced_aligner/model.onnx`. Subsequent runs load it from disk and are much faster.
+On first launch, SRT Workbench automatically:
 
-**Captions are slightly off-timing**
-Use the Review & Edit page to nudge individual cue start/end times, then Save SRT. The alignment is typically within a few hundred milliseconds but videos with long silences or music-only sections can drift slightly.
+1. Creates a Python virtual environment at `~/Library/Application Support/SRT Workbench/python/`
+2. Installs alignment dependencies (ctc-forced-aligner, python-docx, Unidecode)
+3. Downloads the wav2vec2 ONNX model (~1.2 GB)
 
-**App won't start / venv errors**
-Delete `.venv/` and rerun `./setup.command` to rebuild from scratch.
+This only happens once. Subsequent launches skip straight to the app.
+
+## Usage
+
+### Generate Tab
+
+1. Choose a media directory (or pick files individually)
+2. Select a video file (.mp4, .mov, .mkv, .webm, .m4v)
+3. Select a script file (.docx) — stage directions in [square brackets] are automatically filtered out
+4. Click **Run Alignment**
+5. The generated SRT file is saved to an `srt/` subfolder in the media directory
+
+### Review Tab
+
+After generation, the Review tab loads automatically with the video and SRT side by side. You can also load any video + SRT file pair manually.
+
+- The currently spoken subtitle is highlighted in the cue list
+- Click **Jump** on any cue to seek the video to that timecode
+- Edit timecodes or subtitle text directly, then **Save SRT** (Cmd+S)
+
+## Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| ⌘ Return | Play / Pause |
+| ⌘ ← | Skip back 5 seconds |
+| ⌘ → | Skip forward 5 seconds |
+| ⌘ D | Toggle 1x / 2x speed |
+| ⌘ S | Save SRT file |
+
+## Architecture
+
+Swift/SwiftUI app with a Python subprocess for the ML alignment pipeline:
+
+- **UI**: SwiftUI with MVVM pattern (macOS 14+)
+- **Audio extraction**: AVFoundation (no ffmpeg dependency)
+- **Document parsing**: python-docx via Python subprocess
+- **Alignment engine**: Python subprocess running ctc-forced-aligner with wav2vec2 ONNX model
+- **Video playback**: AVKit with caption overlay and time-synced cue highlighting
+
+## Project Structure
+
+```
+├── SRTWorkbench/              # Swift app source
+│   ├── Models/                # SRTCue, SRTDocument
+│   ├── Services/              # Alignment, audio extraction, parsing, setup
+│   ├── ViewModels/            # Generate and Review logic
+│   ├── Views/                 # SwiftUI views
+│   ├── Utilities/             # Timecode formatting
+│   └── Resources/             # alignment_runner.py, app icon, assets
+├── Scripts/
+│   ├── build_python_env.sh    # Manual Python env setup
+│   ├── create_dmg.sh          # DMG packaging
+│   └── generate_icon.swift    # App icon generator
+└── project.yml                # XcodeGen project definition
+```
+
+## License
+
+MIT

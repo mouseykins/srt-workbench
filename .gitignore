@@ -1,23 +1,28 @@
-# Python
+# Xcode
+build/
+DerivedData/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+xcuserdata/
+
+# Generated Xcode project (regenerate with: xcodegen generate)
+SRTWorkbench.xcodeproj/
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# Python environment (built by Scripts/build_python_env.sh)
+PythonEnv/
 .venv/
 __pycache__/
 *.pyc
-*.pyo
-*.pyd
-.Python
 
 # macOS
 .DS_Store
-.AppleDouble
-.LSOverride
+*.dmg
 
-# App runtime directories (contain user files, not code)
-uploads/
-media/
-assets/
-bin/
-
-# Large model file (auto-downloaded on first run to ~/ctc_forced_aligner/)
+# Large model file (auto-downloaded on first run)
 *.onnx
 
 # Claude Code
@@ -25,4 +30,3 @@ bin/
 
 # Secrets
 .env
-*.env
