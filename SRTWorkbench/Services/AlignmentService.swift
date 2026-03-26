@@ -18,12 +18,14 @@ enum AlignmentState: Equatable {
 @Observable
 class AlignmentService {
     var state: AlignmentState = .idle
+    var matchedSection: String?
 
     private var process: Process?
 
     /// Run the full alignment pipeline: extract audio → run Python alignment → return SRT
     func runAlignment(videoURL: URL, docxURL: URL, outputDir: URL) async throws -> URL {
         state = .running(currentStep: .extractAudio)
+        matchedSection = nil
 
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
@@ -37,7 +39,8 @@ class AlignmentService {
         let srtFilename = videoURL.deletingPathExtension().lastPathComponent + " - aligned.srt"
         let srtURL = outputDir.appendingPathComponent(srtFilename)
 
-        try await runPythonAlignment(audioPath: wavURL, docxPath: docxURL, outputPath: srtURL)
+        let videoStem = videoURL.deletingPathExtension().lastPathComponent
+        try await runPythonAlignment(audioPath: wavURL, docxPath: docxURL, outputPath: srtURL, videoStem: videoStem)
 
         state = .complete(srtURL: srtURL)
         return srtURL
@@ -51,7 +54,7 @@ class AlignmentService {
 
     // MARK: - Private
 
-    private func runPythonAlignment(audioPath: URL, docxPath: URL, outputPath: URL) async throws {
+    private func runPythonAlignment(audioPath: URL, docxPath: URL, outputPath: URL, videoStem: String) async throws {
         let envManager = PythonEnvironmentManager.shared
 
         guard let pythonURL = envManager.pythonURL, envManager.isPythonAvailable else {
@@ -66,6 +69,7 @@ class AlignmentService {
             "docx_path": docxPath.path,
             "output_path": outputPath.path,
             "model_path": envManager.modelURL.path,
+            "video_stem": videoStem,
         ]
 
         let inputData = try JSONSerialization.data(withJSONObject: input)
@@ -161,6 +165,13 @@ class AlignmentService {
                     step = .generateSRT
                 }
                 self?.state = .running(currentStep: step)
+            case "section_match":
+                let matched = json["matched"] as? Bool ?? false
+                if matched, let heading = json["heading"] as? String {
+                    self?.matchedSection = heading
+                } else {
+                    self?.matchedSection = nil
+                }
             case "error":
                 let message = json["message"] as? String ?? "Unknown error"
                 self?.state = .failed(message)

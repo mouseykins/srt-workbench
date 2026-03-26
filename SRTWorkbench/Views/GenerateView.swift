@@ -82,6 +82,11 @@ struct GenerateView: View {
                 case .idle:
                     EmptyView()
                 case .running(let currentStep):
+                    if let section = viewModel.alignmentService.matchedSection {
+                        Label("Matched section: \(section)", systemImage: "doc.text.magnifyingglass")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                    }
                     alignmentChecklist(currentStep: currentStep)
                 case .complete(let srtURL):
                     alignmentChecklist(currentStep: nil)

@@ -44,6 +44,12 @@ def result(srt_path, num_cues):
     print(json.dumps(msg), flush=True)
 
 
+def section_match(matched, heading):
+    """Report whether a document section was matched to the video."""
+    msg = {"type": "section_match", "matched": matched, "heading": heading}
+    print(json.dumps(msg), flush=True)
+
+
 def format_srt_time(seconds):
     """Convert seconds to SRT timestamp format HH:MM:SS,mmm."""
     h = int(seconds // 3600)
@@ -72,6 +78,106 @@ def extract_script_lines(docx_path):
     return lines
 
 
+def _is_spoken_line(text):
+    """Return True if the line is non-empty spoken text (not a stage direction)."""
+    if not text:
+        return False
+    if re.match(r"^\[.*\]$", text):
+        return False
+    return True
+
+
+def _normalize_identifier(s):
+    """Normalize a string for fuzzy matching: lowercase, collapse separators."""
+    s = s.lower()
+    s = re.sub(r"[._\-\s]+", " ", s)
+    return s.strip()
+
+
+def _extract_leading_id(s):
+    """Extract leading identifier like '1.2.1', '3a', 'Ch3' from a string."""
+    m = re.match(r"^\s*([A-Za-z]*\d[\d.]*[A-Za-z]?)", s)
+    return m.group(1).lower() if m else None
+
+
+def _find_matching_section(sections, video_stem):
+    """Find the section whose heading matches the video filename stem.
+
+    Returns (heading_text, lines) tuple or (None, None) if no match.
+    """
+    stem_norm = _normalize_identifier(video_stem)
+
+    # Strategy 1: normalized stem is a substring of heading or vice versa
+    for heading, lines in sections:
+        heading_norm = _normalize_identifier(heading)
+        if stem_norm in heading_norm or heading_norm in stem_norm:
+            return heading, lines
+
+    # Strategy 2: compare leading numeric/alphanumeric identifiers
+    stem_id = _extract_leading_id(video_stem)
+    if stem_id:
+        for heading, lines in sections:
+            heading_id = _extract_leading_id(heading)
+            if heading_id and stem_id == heading_id:
+                return heading, lines
+
+    return None, None
+
+
+def _is_section_heading(style_name, text):
+    """Detect whether a paragraph is a section heading.
+
+    Checks Word heading styles first, then falls back to detecting text
+    patterns like '1.2.1 – Title', 'Ch3 - Title', 'A2: Title', etc.
+    """
+    if style_name.startswith("Heading"):
+        return True
+    # Text pattern: starts with an alphanumeric identifier (with dots/letters)
+    # followed by a separator (dash, en-dash, em-dash, colon, pipe)
+    if re.match(r"^[A-Za-z]*\d[\d.]*[A-Za-z]?\s*[–\-—:|]", text):
+        return True
+    return False
+
+
+def extract_section_lines(docx_path, video_stem):
+    """Extract spoken lines for a specific section of a multi-section .docx.
+
+    Splits the document on section headings (detected by Word heading styles
+    or text patterns like '1.2.1 – Title'), then matches the video filename
+    stem against heading text. Returns (heading, lines) if matched, or
+    (None, None) if no headings exist or no match is found.
+    """
+    from docx import Document
+
+    doc = Document(docx_path)
+    sections = []  # list of (heading_text, [lines])
+    current_heading = None
+    current_lines = []
+
+    for para in doc.paragraphs:
+        style_name = para.style.name or ""
+        text = para.text.strip()
+
+        if text and _is_section_heading(style_name, text):
+            # Save previous section
+            if current_heading is not None:
+                sections.append((current_heading, current_lines))
+            current_heading = text
+            current_lines = []
+        else:
+            if _is_spoken_line(text):
+                current_lines.append(text)
+
+    # Capture the last section
+    if current_heading is not None:
+        sections.append((current_heading, current_lines))
+
+    if not sections:
+        return None, None
+
+    return _find_matching_section(sections, video_stem)
+
+
 def main():
     # Read input from stdin
     try:
@@ -84,6 +190,7 @@ def main():
     docx_path = config.get("docx_path")
     output_path = config.get("output_path")
     model_path = config.get("model_path")
+    video_stem = config.get("video_stem")
 
     if not audio_path or not output_path:
         error("Missing audio_path or output_path")
@@ -93,7 +200,19 @@ def main():
         if not os.path.isfile(docx_path):
             error(f"Script file not found: {docx_path}")
         try:
-            script_lines = extract_script_lines(docx_path)
+            # Try section-based extraction if we have a video stem
+            if video_stem:
+                matched_heading, section_lines = extract_section_lines(
+                    docx_path, video_stem
+                )
+                if section_lines is not None:
+                    script_lines = section_lines
+                    section_match(True, matched_heading)
+                else:
+                    script_lines = extract_script_lines(docx_path)
+                    section_match(False, None)
+            else:
+                script_lines = extract_script_lines(docx_path)
         except Exception as e:
             error(f"Failed to parse .docx: {e}")
     else:
