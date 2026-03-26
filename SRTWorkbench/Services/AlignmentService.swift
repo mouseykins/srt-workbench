@@ -23,7 +23,7 @@ class AlignmentService {
     private var process: Process?
 
     /// Run the full alignment pipeline: extract audio → run Python alignment → return SRT
-    func runAlignment(videoURL: URL, docxURL: URL, outputDir: URL) async throws -> URL {
+    func runAlignment(videoURL: URL, docxURL: URL, outputDir: URL, filterPatterns: [String] = [], stripPatterns: [String] = []) async throws -> URL {
         state = .running(currentStep: .extractAudio)
         matchedSection = nil
 
@@ -40,7 +40,7 @@ class AlignmentService {
         let srtURL = outputDir.appendingPathComponent(srtFilename)
 
         let videoStem = videoURL.deletingPathExtension().lastPathComponent
-        try await runPythonAlignment(audioPath: wavURL, docxPath: docxURL, outputPath: srtURL, videoStem: videoStem)
+        try await runPythonAlignment(audioPath: wavURL, docxPath: docxURL, outputPath: srtURL, videoStem: videoStem, filterPatterns: filterPatterns, stripPatterns: stripPatterns)
 
         state = .complete(srtURL: srtURL)
         return srtURL
@@ -54,7 +54,7 @@ class AlignmentService {
 
     // MARK: - Private
 
-    private func runPythonAlignment(audioPath: URL, docxPath: URL, outputPath: URL, videoStem: String) async throws {
+    private func runPythonAlignment(audioPath: URL, docxPath: URL, outputPath: URL, videoStem: String, filterPatterns: [String] = [], stripPatterns: [String] = []) async throws {
         let envManager = PythonEnvironmentManager.shared
 
         guard let pythonURL = envManager.pythonURL, envManager.isPythonAvailable else {
@@ -70,6 +70,8 @@ class AlignmentService {
             "output_path": outputPath.path,
             "model_path": envManager.modelURL.path,
             "video_stem": videoStem,
+            "filter_patterns": filterPatterns,
+            "strip_patterns": stripPatterns,
         ]
 
         let inputData = try JSONSerialization.data(withJSONObject: input)

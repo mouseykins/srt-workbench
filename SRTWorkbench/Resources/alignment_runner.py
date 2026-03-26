@@ -59,32 +59,56 @@ def format_srt_time(seconds):
     return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
 
 
-def extract_script_lines(docx_path):
+def _compile_filters(filter_patterns):
+    """Compile a list of regex pattern strings, reporting invalid ones as errors."""
+    compiled = []
+    for p in (filter_patterns or []):
+        try:
+            compiled.append(re.compile(p))
+        except re.error as e:
+            error(f"Invalid filter regex '{p}': {e}")
+    return compiled
+
+
+def _is_spoken_line(text, filters=None):
+    """Return True if the line is non-empty spoken text that doesn't match any filter."""
+    if not text:
+        return False
+    if filters:
+        for pattern in filters:
+            if pattern.match(text):
+                return False
+    return True
+
+
+def _apply_strip_patterns(text, strips):
+    """Remove all inline matches of strip patterns from text."""
+    for pattern in strips:
+        text = pattern.sub("", text)
+    # Collapse multiple spaces and re-strip
+    text = re.sub(r"  +", " ", text).strip()
+    return text
+
+
+def extract_script_lines(docx_path, filter_patterns=None, strip_patterns=None):
     """Extract spoken lines from a .docx script file using python-docx.
 
-    Filters out empty paragraphs and stage directions in [square brackets].
+    First strips inline patterns (e.g. slide numbers), then filters out
+    empty paragraphs and lines matching any of the provided filter patterns.
     """
     from docx import Document
 
+    filters = _compile_filters(filter_patterns)
+    strips = _compile_filters(strip_patterns)
     doc = Document(docx_path)
     lines = []
     for para in doc.paragraphs:
         text = para.text.strip()
-        if not text:
-            continue
-        if re.match(r"^\[.*\]$", text):
-            continue
-        lines.append(text)
+        if strips:
+            text = _apply_strip_patterns(text, strips)
+        if _is_spoken_line(text, filters):
+            lines.append(text)
     return lines
-
-
-def _is_spoken_line(text):
-    """Return True if the line is non-empty spoken text (not a stage direction)."""
-    if not text:
-        return False
-    if re.match(r"^\[.*\]$", text):
-        return False
-    return True
 
 
 def _normalize_identifier(s):
@@ -132,14 +156,18 @@ def _is_section_heading(style_name, text):
     """
     if style_name.startswith("Heading"):
         return True
-    # Text pattern: starts with an alphanumeric identifier (with dots/letters)
-    # followed by a separator (dash, en-dash, em-dash, colon, pipe)
-    if re.match(r"^[A-Za-z]*\d[\d.]*[A-Za-z]?\s*[–\-—:|]", text):
+    # Text pattern: dotted identifier like '1.2.1' or letter-prefixed like 'Ch3'
+    # followed by a separator (dash, en-dash, em-dash, colon, pipe) and a title.
+    # Requires either a dot in the identifier or a letter prefix to avoid
+    # matching slide numbers like '1:' or '2:'.
+    if re.match(r"^[A-Za-z]+\d[\d.]*[A-Za-z]?\s*[–\-—:|]", text):
+        return True
+    if re.match(r"^[A-Za-z]*\d[\d.]*[A-Za-z]?\s*[–\-—:|]", text) and "." in text.split()[0]:
         return True
     return False
 
 
-def extract_section_lines(docx_path, video_stem):
+def extract_section_lines(docx_path, video_stem, filter_patterns=None, strip_patterns=None):
     """Extract spoken lines for a specific section of a multi-section .docx.
 
     Splits the document on section headings (detected by Word heading styles
@@ -149,6 +177,8 @@ def extract_section_lines(docx_path, video_stem):
     """
     from docx import Document
 
+    filters = _compile_filters(filter_patterns)
+    strips = _compile_filters(strip_patterns)
     doc = Document(docx_path)
     sections = []  # list of (heading_text, [lines])
     current_heading = None
@@ -165,7 +195,9 @@ def extract_section_lines(docx_path, video_stem):
             current_heading = text
             current_lines = []
         else:
-            if _is_spoken_line(text):
+            if strips:
+                text = _apply_strip_patterns(text, strips)
+            if _is_spoken_line(text, filters):
                 current_lines.append(text)
 
     # Capture the last section
@@ -191,6 +223,8 @@ def main():
     output_path = config.get("output_path")
     model_path = config.get("model_path")
     video_stem = config.get("video_stem")
+    filter_patterns = config.get("filter_patterns", [r"^\[.*\]$"])
+    strip_patterns = config.get("strip_patterns", [])
 
     if not audio_path or not output_path:
         error("Missing audio_path or output_path")
@@ -203,16 +237,16 @@ def main():
             # Try section-based extraction if we have a video stem
             if video_stem:
                 matched_heading, section_lines = extract_section_lines(
-                    docx_path, video_stem
+                    docx_path, video_stem, filter_patterns=filter_patterns, strip_patterns=strip_patterns
                 )
                 if section_lines is not None:
                     script_lines = section_lines
                     section_match(True, matched_heading)
                 else:
-                    script_lines = extract_script_lines(docx_path)
+                    script_lines = extract_script_lines(docx_path, filter_patterns=filter_patterns, strip_patterns=strip_patterns)
                     section_match(False, None)
             else:
-                script_lines = extract_script_lines(docx_path)
+                script_lines = extract_script_lines(docx_path, filter_patterns=filter_patterns, strip_patterns=strip_patterns)
         except Exception as e:
             error(f"Failed to parse .docx: {e}")
     else:

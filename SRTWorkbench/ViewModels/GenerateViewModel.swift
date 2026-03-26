@@ -10,6 +10,35 @@ class GenerateViewModel {
     var errorMessage: String?
     var showError = false
 
+    // Text filter toggles
+    var filterStageDirections = true
+    var filterSlideNumbers = true
+    var customFilterPatternsText = ""
+
+    /// Patterns that remove entire lines when the full line matches.
+    var activeFilterPatterns: [String] {
+        var patterns: [String] = []
+        if filterStageDirections {
+            patterns.append(#"^\[.*\]$"#)
+        }
+        let custom = customFilterPatternsText
+            .components(separatedBy: CharacterSet.newlines.union(CharacterSet(charactersIn: ",")))
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        patterns.append(contentsOf: custom)
+        return patterns
+    }
+
+    /// Patterns that strip inline matches from text (keeping the rest of the line).
+    var activeStripPatterns: [String] {
+        var patterns: [String] = []
+        if filterSlideNumbers {
+            patterns.append(#"\(\d+\)"#)
+            patterns.append(#"^\d+:\s*"#)
+        }
+        return patterns
+    }
+
     static let videoExtensions = Set(["mp4", "mov", "mkv", "webm", "m4v"])
     static let scriptExtensions = Set(["docx"])
 
@@ -91,7 +120,9 @@ class GenerateViewModel {
             let srtURL = try await alignmentService.runAlignment(
                 videoURL: video,
                 docxURL: script,
-                outputDir: outputDir
+                outputDir: outputDir,
+                filterPatterns: activeFilterPatterns,
+                stripPatterns: activeStripPatterns
             )
 
             // Post notification so Review tab can pick it up

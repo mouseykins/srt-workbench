@@ -71,6 +71,33 @@ struct GenerateView: View {
                         }
                     }
                 }
+
+                Section("Text Filters") {
+                    Toggle(isOn: $viewModel.filterStageDirections) {
+                        VStack(alignment: .leading) {
+                            Text("[Stage directions]")
+                            Text("Skip lines wrapped in [square brackets]")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    Toggle(isOn: $viewModel.filterSlideNumbers) {
+                        VStack(alignment: .leading) {
+                            Text("(Slide numbers)")
+                            Text("Strip slide references like (1), (2) or 1:, 2: from text")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    VStack(alignment: .leading) {
+                        Text("Custom patterns (comma or newline separated)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        TextEditor(text: $viewModel.customFilterPatternsText)
+                            .font(.system(.body, design: .monospaced))
+                            .frame(height: 60)
+                    }
+                }
             }
             .formStyle(.grouped)
 
