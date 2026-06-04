@@ -125,6 +125,14 @@ class GenerateViewModel {
                 stripPatterns: activeStripPatterns
             )
 
+            // Post-process for DCMP/CEA-608 compliance: wrap to ≤32-char lines,
+            // split over-long cues, and enforce minimum durations.
+            if let rawCues = try? SRTParser.parse(contentsOf: srtURL) {
+                let compliant = CaptionComplianceService.makeCompliant(rawCues)
+                let serialized = SRTParser.serialize(compliant)
+                try? serialized.write(to: srtURL, atomically: true, encoding: .utf8)
+            }
+
             // Post notification so Review tab can pick it up
             NotificationCenter.default.post(
                 name: .alignmentCompleted,

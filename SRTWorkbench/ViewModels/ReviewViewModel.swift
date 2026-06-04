@@ -87,6 +87,27 @@ class ReviewViewModel {
         // isDirty is now computed automatically by comparing cues to savedCues
     }
 
+    // MARK: - Compliance
+
+    /// DCMP / CEA-608 issues for the current cues (advisory, recomputed on read).
+    var complianceViolations: [ComplianceViolation] {
+        document.complianceViolations()
+    }
+
+    /// Short multi-line summary of current compliance issues, for tooltips.
+    var complianceSummary: String {
+        let issues = complianceViolations
+        guard !issues.isEmpty else { return "All cues are ADA/DCMP compliant" }
+        return issues.prefix(12).map(\.message).joined(separator: "\n")
+    }
+
+    /// Re-wrap every cue to ≤32-char lines, split over-long cues, and enforce
+    /// minimum durations. Works on any loaded SRT, not just generated ones.
+    func reflowForCompliance() {
+        document.cues = CaptionComplianceService.makeCompliant(document.cues)
+        saveStatusMessage = "Reflowed \(document.cues.count) cues for compliance"
+    }
+
     // MARK: - Save
 
     func save() {

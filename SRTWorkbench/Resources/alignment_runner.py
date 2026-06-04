@@ -210,6 +210,43 @@ def extract_section_lines(docx_path, video_stem, filter_patterns=None, strip_pat
     return _find_matching_section(sections, video_stem)
 
 
+def _split_line_segments(line_words, line_word_ts, max_secs, max_chars):
+    """Split a line's words into segments respecting both a max duration and a
+    max character count, breaking only at word boundaries. Uses the real
+    word-level timestamps so each segment keeps accurate timing.
+
+    Returns a list of (begin, end, text) tuples.
+    """
+    segments = []
+    seg_start = 0
+    n = len(line_word_ts)
+
+    for i in range(n):
+        seg_begin = line_word_ts[seg_start]["start"]
+        seg_end = line_word_ts[i]["end"]
+        seg_text = " ".join(line_words[seg_start:i + 1])
+        too_long_time = (seg_end - seg_begin) > max_secs
+        too_long_chars = len(seg_text) > max_chars
+        # If word i pushes the segment past a limit and we already have at least
+        # one earlier word, close the segment *before* word i.
+        if (too_long_time or too_long_chars) and i > seg_start:
+            segments.append((
+                line_word_ts[seg_start]["start"],
+                line_word_ts[i - 1]["end"],
+                " ".join(line_words[seg_start:i]),
+            ))
+            seg_start = i
+
+    if seg_start < n:
+        segments.append((
+            line_word_ts[seg_start]["start"],
+            line_word_ts[n - 1]["end"],
+            " ".join(line_words[seg_start:]),
+        ))
+
+    return segments
+
+
 def main():
     # Read input from stdin
     try:
@@ -336,8 +373,11 @@ def main():
 
     progress("Generating SRT file...", 90)
 
-    # Map word-level timestamps back to original script lines
-    MAX_SUBTITLE_SECS = 4.5
+    # Map word-level timestamps back to original script lines.
+    # DCMP / CEA-608 limits: ≤6s on screen and ≤64 chars per cue (2×32-char
+    # lines). The Swift compliance pass inserts the actual line break later.
+    MAX_SUBTITLE_SECS = 6.0
+    MAX_CHARS_PER_CUE = 64
     srt_entries = []
     word_idx = 0
     total_words = len(word_timestamps)
@@ -357,33 +397,18 @@ def main():
             end = line_word_ts[-1]["end"]
             duration = end - begin
 
-            if duration <= MAX_SUBTITLE_SECS:
+            # Split if the line is too long either in time or in characters.
+            if duration <= MAX_SUBTITLE_SECS and len(line) <= MAX_CHARS_PER_CUE:
                 srt_entries.append((begin, end, line))
             else:
-                seg_start_i = 0
-                for wi in range(1, len(line_word_ts)):
-                    seg_begin = line_word_ts[seg_start_i]["start"]
-                    seg_end = line_word_ts[wi]["end"]
-                    if seg_end - seg_begin > MAX_SUBTITLE_SECS:
-                        seg_text = " ".join(line_words[seg_start_i:wi])
-                        srt_entries.append((
-                            line_word_ts[seg_start_i]["start"],
-                            line_word_ts[wi - 1]["end"],
-                            seg_text,
-                        ))
-                        seg_start_i = wi
-                if seg_start_i < len(line_word_ts):
-                    seg_text = " ".join(line_words[seg_start_i:])
-                    srt_entries.append((
-                        line_word_ts[seg_start_i]["start"],
-                        line_word_ts[-1]["end"],
-                        seg_text,
-                    ))
+                srt_entries.extend(_split_line_segments(
+                    line_words, line_word_ts, MAX_SUBTITLE_SECS, MAX_CHARS_PER_CUE
+                ))
 
         word_idx = end_idx
 
-    # Enforce minimum subtitle duration of 1 second
-    MIN_SUBTITLE_SECS = 1.0
+    # Enforce minimum subtitle duration (DCMP minimum on-screen time)
+    MIN_SUBTITLE_SECS = 1.3
     for i in range(len(srt_entries)):
         begin, end, text = srt_entries[i]
         if end - begin < MIN_SUBTITLE_SECS:

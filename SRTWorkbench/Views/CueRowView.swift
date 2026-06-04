@@ -30,9 +30,23 @@ struct CueRowView: View {
 
                 Spacer()
 
-                Text(formatDuration(cue.endTime - cue.startTime))
-                    .font(.callout)
-                    .foregroundStyle(.tertiary)
+                let duration = cue.endTime - cue.startTime
+                let durationOutOfRange = duration < CaptionCompliance.minDuration
+                    || duration > CaptionCompliance.maxDuration
+                HStack(spacing: 4) {
+                    if durationOutOfRange {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.caption2)
+                            .foregroundStyle(.orange)
+                    }
+                    Text(formatDuration(duration))
+                        .font(.callout)
+                        .foregroundStyle(durationOutOfRange ? AnyShapeStyle(.orange) : AnyShapeStyle(.tertiary))
+                }
+                .help(durationOutOfRange
+                      ? String(format: "On-screen duration should be %.1f–%.1fs",
+                               CaptionCompliance.minDuration, CaptionCompliance.maxDuration)
+                      : "")
             }
 
             // Timecode fields
@@ -68,6 +82,22 @@ struct CueRowView: View {
                 .onChange(of: bodyText) { _, newValue in
                     onTextChanged(newValue)
                 }
+
+            // Per-line character counts (ADA/DCMP: ≤32 chars, ≤2 lines)
+            let textLines = bodyText.components(separatedBy: "\n")
+            HStack(spacing: 8) {
+                ForEach(Array(textLines.enumerated()), id: \.offset) { idx, line in
+                    Text("L\(idx + 1) \(line.count)")
+                        .font(.caption2.monospaced())
+                        .foregroundStyle(line.count > CaptionCompliance.maxCharsPerLine ? .red : .green)
+                }
+                if textLines.count > CaptionCompliance.maxLinesPerCue {
+                    Text("· \(textLines.count) lines")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.red)
+                }
+                Spacer()
+            }
         }
         .padding(.vertical, isActive ? 8 : 4)
         .padding(.horizontal, isActive ? 4 : 0)

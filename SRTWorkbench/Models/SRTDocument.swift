@@ -41,6 +41,11 @@ class SRTDocument {
         self.savedCues = cues
     }
 
+    /// DCMP / CEA-608 compliance issues (advisory — these never block saving).
+    func complianceViolations() -> [ComplianceViolation] {
+        CaptionComplianceService.validate(cues)
+    }
+
     func validate() -> [SRTValidationError] {
         var errors: [SRTValidationError] = []
         var previousEnd: TimeInterval = 0

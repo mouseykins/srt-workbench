@@ -22,6 +22,28 @@ struct ReviewView: View {
                         .foregroundStyle(.secondary)
                 }
 
+                if viewModel.isLoaded {
+                    let issues = viewModel.complianceViolations
+                    if issues.isEmpty {
+                        Label("ADA compliant", systemImage: "checkmark.seal.fill")
+                            .font(.callout)
+                            .foregroundStyle(.green)
+                            .help("All cues meet the 32-char / 2-line / duration limits")
+                    } else {
+                        Label("\(issues.count) compliance \(issues.count == 1 ? "issue" : "issues")",
+                              systemImage: "exclamationmark.triangle.fill")
+                            .font(.callout)
+                            .foregroundStyle(.yellow)
+                            .help(viewModel.complianceSummary)
+                    }
+
+                    Button(action: { viewModel.reflowForCompliance() }) {
+                        Label("Reflow", systemImage: "text.alignleft")
+                    }
+                    .buttonStyle(.bordered)
+                    .help("Re-wrap all cues to 32-char lines for ADA/DCMP compliance")
+                }
+
                 Button(action: { viewModel.togglePlaybackSpeed() }) {
                     Text(viewModel.playbackSpeed == 1.0 ? "1x" : "2x")
                         .font(.callout.weight(.medium).monospaced())

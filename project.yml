@@ -23,12 +23,14 @@ targets:
         LSApplicationCategoryType: public.app-category.productivity
         CFBundleIconFile: AppIcon
         CFBundleIconName: AppIcon
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
     settings:
       base:
         PRODUCT_NAME: SRT Workbench
         PRODUCT_BUNDLE_IDENTIFIER: com.srtworkbench.app
-        MARKETING_VERSION: "1.0.0"
-        CURRENT_PROJECT_VERSION: "1"
+        MARKETING_VERSION: "1.3.0"
+        CURRENT_PROJECT_VERSION: "4"
         SWIFT_VERSION: "5.9"
         MACOSX_DEPLOYMENT_TARGET: "14.0"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
