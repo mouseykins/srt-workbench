@@ -5,6 +5,7 @@ struct CueRowView: View {
     let cue: SRTCue
     let isActive: Bool
     let onJump: () -> Void
+    let onDelete: () -> Void
     let onStartChanged: (String) -> Void
     let onEndChanged: (String) -> Void
     let onTextChanged: (String) -> Void
@@ -27,6 +28,13 @@ struct CueRowView: View {
                 Button("Jump", action: onJump)
                     .buttonStyle(.bordered)
                     .controlSize(.small)
+
+                Button(role: .destructive, action: onDelete) {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .help("Delete this cue")
 
                 Spacer()
 

@@ -87,6 +87,11 @@ class ReviewViewModel {
         // isDirty is now computed automatically by comparing cues to savedCues
     }
 
+    func deleteCue(at index: Int) {
+        guard document.cues.indices.contains(index) else { return }
+        document.cues.remove(at: index)
+    }
+
     // MARK: - Compliance
 
     /// DCMP / CEA-608 issues for the current cues (advisory, recomputed on read).

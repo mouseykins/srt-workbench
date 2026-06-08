@@ -52,6 +52,7 @@ enum CaptionComplianceService {
             }
         }
 
+        mergeShortCues(&result)
         enforceMinDuration(&result)
         return result
     }
@@ -159,6 +160,44 @@ enum CaptionComplianceService {
             if newEnd > cues[i].endTime {
                 cues[i].endTime = newEnd
             }
+        }
+    }
+
+    /// Merge consecutive short-duration cues whose combined text fits within
+    /// the relaxed line limit. Iterates forward; after a successful merge the
+    /// combined cue is immediately re-checked against its new successor so
+    /// chains of short fragments (e.g. "of" + "z/OS" + "Workload") collapse
+    /// into one pass.
+    private static func mergeShortCues(_ cues: inout [SRTCue]) {
+        var i = 0
+        while i < cues.count - 1 {
+            let current = cues[i]
+            let next = cues[i + 1]
+
+            // Only consider merging when at least one of the pair is short.
+            guard current.duration < CaptionCompliance.minDuration
+                    || next.duration < CaptionCompliance.minDuration
+            else {
+                i += 1
+                continue
+            }
+
+            // Build the combined text and check whether it fits.
+            let combinedWords = normalizeWhitespace(current.text + " " + next.text)
+                .split(separator: " ").map(String.init)
+            guard CaptionLineBreaker.canFit(combinedWords, maxCharsPerLine: relaxedMaxCharsPerLine) else {
+                i += 1
+                continue
+            }
+
+            // Merge: span covers both cues, text is re-wrapped.
+            let merged = SRTCue(
+                startTime: current.startTime,
+                endTime: next.endTime,
+                text: wrap(combinedWords, maxCharsPerLine: relaxedMaxCharsPerLine)
+            )
+            cues.replaceSubrange(i...(i + 1), with: [merged])
+            // Don't advance i — re-check the merged cue against its new successor.
         }
     }
 
