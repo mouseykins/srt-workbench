@@ -110,6 +110,11 @@ struct CueRowView: View {
             endText = cue.endTimecode
             bodyText = cue.text
         }
+        .onChange(of: cue) { _, newCue in
+            startText = newCue.startTimecode
+            endText = newCue.endTimecode
+            bodyText = newCue.text
+        }
     }
 
     private func formatDuration(_ seconds: TimeInterval) -> String {

@@ -133,12 +133,15 @@ class GenerateViewModel {
                 try? serialized.write(to: srtURL, atomically: true, encoding: .utf8)
             }
 
-            // Post notification so Review tab can pick it up
-            NotificationCenter.default.post(
-                name: .alignmentCompleted,
-                object: nil,
-                userInfo: ["srtURL": srtURL, "videoURL": video]
-            )
+            // Post notification so Review tab can pick it up.
+            // Dispatch to MainActor so ReviewViewModel state mutations happen on the main thread.
+            await MainActor.run {
+                NotificationCenter.default.post(
+                    name: .alignmentCompleted,
+                    object: nil,
+                    userInfo: ["srtURL": srtURL, "videoURL": video]
+                )
+            }
 
         } catch {
             errorMessage = error.localizedDescription

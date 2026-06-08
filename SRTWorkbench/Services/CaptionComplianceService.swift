@@ -4,8 +4,17 @@ import Foundation
 ///
 /// `makeCompliant` rewraps cue text into ≤2 lines of ≤32 chars, splitting a cue
 /// into several when its text is too long for one cue, and enforces the minimum
-/// on-screen duration. `validate` reports issues without mutating anything.
+/// on-screen duration. When a strict split would produce sub-cues shorter than
+/// `minDuration`, the line limit is relaxed to ≤45 chars for that cue only
+/// before returning to strict rules for the next cue.
+/// `validate` reports issues without mutating anything.
 enum CaptionComplianceService {
+
+    // MARK: - Constants
+
+    /// Fallback line-length limit used only when splitting at the strict 32-char
+    /// limit would produce sub-cues too short to meet `minDuration`.
+    private static let relaxedMaxCharsPerLine = 45
 
     // MARK: - Transformation
 
@@ -22,14 +31,24 @@ enum CaptionComplianceService {
                 continue
             }
 
-            let chunks = splitIntoFittingChunks(words)
+            // Try the strict 32-char limit first.
+            let strictChunks = splitIntoFittingChunks(words, maxCharsPerLine: CaptionCompliance.maxCharsPerLine)
+
+            // If splitting at the strict limit would produce any sub-cue shorter
+            // than minDuration, retry with the relaxed limit for this cue only.
+            let useRelaxed = strictChunks.count > 1
+                && wouldProduceShortCue(cue, chunks: strictChunks)
+            let maxChars = useRelaxed ? relaxedMaxCharsPerLine : CaptionCompliance.maxCharsPerLine
+            let chunks = useRelaxed
+                ? splitIntoFittingChunks(words, maxCharsPerLine: relaxedMaxCharsPerLine)
+                : strictChunks
 
             if chunks.count <= 1 {
                 var newCue = cue
-                newCue.text = wrap(words)
+                newCue.text = wrap(words, maxCharsPerLine: maxChars)
                 result.append(newCue)
             } else {
-                result.append(contentsOf: splitCue(cue, into: chunks))
+                result.append(contentsOf: splitCue(cue, into: chunks, maxCharsPerLine: maxChars))
             }
         }
 
@@ -70,15 +89,31 @@ enum CaptionComplianceService {
 
     // MARK: - Splitting helpers
 
-    /// Greedily pack words into chunks where each chunk fits in ≤2 lines of ≤32.
-    /// An over-long single word becomes its own chunk (flagged later by `validate`).
-    private static func splitIntoFittingChunks(_ words: [String]) -> [[String]] {
+    /// Returns `true` when proportionally splitting `cue` into `chunks` by
+    /// character count would produce at least one sub-cue shorter than
+    /// `CaptionCompliance.minDuration`.
+    private static func wouldProduceShortCue(_ cue: SRTCue, chunks: [[String]]) -> Bool {
+        let span = cue.endTime - cue.startTime
+        let totalChars = Double(chunks.reduce(0) { $0 + charCount($1) })
+        guard totalChars > 0 else { return false }
+        return chunks.contains {
+            span * Double(charCount($0)) / totalChars < CaptionCompliance.minDuration
+        }
+    }
+
+    /// Greedily pack words into chunks where each chunk fits in ≤2 lines of
+    /// `maxCharsPerLine`. An over-long single word becomes its own chunk
+    /// (flagged later by `validate`).
+    private static func splitIntoFittingChunks(
+        _ words: [String],
+        maxCharsPerLine: Int = CaptionCompliance.maxCharsPerLine
+    ) -> [[String]] {
         var chunks: [[String]] = []
         var current: [String] = []
 
         for w in words {
             let trial = current + [w]
-            if current.isEmpty || CaptionLineBreaker.canFit(trial) {
+            if current.isEmpty || CaptionLineBreaker.canFit(trial, maxCharsPerLine: maxCharsPerLine) {
                 current = trial
             } else {
                 chunks.append(current)
@@ -90,7 +125,11 @@ enum CaptionComplianceService {
     }
 
     /// Split one cue's time span across `chunks`, proportional to character count.
-    private static func splitCue(_ cue: SRTCue, into chunks: [[String]]) -> [SRTCue] {
+    private static func splitCue(
+        _ cue: SRTCue,
+        into chunks: [[String]],
+        maxCharsPerLine: Int = CaptionCompliance.maxCharsPerLine
+    ) -> [SRTCue] {
         let totalChars = chunks.reduce(0) { $0 + charCount($1) }
         guard totalChars > 0 else { return [cue] }
 
@@ -104,7 +143,7 @@ enum CaptionComplianceService {
             let start = cursor
             let end = isLast ? cue.endTime : cursor + portion
             cursor = end
-            subCues.append(SRTCue(startTime: start, endTime: end, text: wrap(chunk)))
+            subCues.append(SRTCue(startTime: start, endTime: end, text: wrap(chunk, maxCharsPerLine: maxCharsPerLine)))
         }
         return subCues
     }
@@ -125,9 +164,12 @@ enum CaptionComplianceService {
 
     // MARK: - Text helpers
 
-    private static func wrap(_ words: [String]) -> String {
+    private static func wrap(
+        _ words: [String],
+        maxCharsPerLine: Int = CaptionCompliance.maxCharsPerLine
+    ) -> String {
         let text = words.joined(separator: " ")
-        if let lines = CaptionLineBreaker.breakIntoLines(text) {
+        if let lines = CaptionLineBreaker.breakIntoLines(text, maxCharsPerLine: maxCharsPerLine) {
             return lines.joined(separator: "\n")
         }
         return text
