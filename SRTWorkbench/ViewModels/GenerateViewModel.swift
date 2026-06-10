@@ -1,19 +1,73 @@
 import AppKit
+import AVFoundation
 import Foundation
+import UniformTypeIdentifiers
 
+@MainActor
 @Observable
 class GenerateViewModel {
-    var mediaDirectory: URL?
-    var selectedVideo: URL?
+    var mediaDirectory: URL? {
+        didSet {
+            refreshFileLists()
+            UserDefaults.standard.set(mediaDirectory?.path, forKey: Keys.mediaDirectory)
+        }
+    }
+    var selectedVideo: URL? {
+        didSet { loadVideoDuration() }
+    }
     var selectedScript: URL?
     var alignmentService = AlignmentService()
     var errorMessage: String?
     var showError = false
 
-    // Text filter toggles
-    var filterStageDirections = true
-    var filterSlideNumbers = true
-    var customFilterPatternsText = ""
+    /// "14:32" — duration of the selected video, loaded asynchronously.
+    var videoDurationText: String?
+
+    // Script-extraction preview sheet
+    var showScriptPreview = false
+    var isLoadingPreview = false
+    var previewHeading: String?
+    var previewLines: [String] = []
+
+    // Cached directory scans — recomputed on directory change or refresh, NOT
+    // on every SwiftUI render (scanning is recursive and can be slow).
+    private(set) var availableVideos: [URL] = []
+    private(set) var availableScripts: [URL] = []
+
+    // Text filter toggles (persisted)
+    var filterStageDirections: Bool {
+        didSet { UserDefaults.standard.set(filterStageDirections, forKey: Keys.filterStageDirections) }
+    }
+    var filterSlideNumbers: Bool {
+        didSet { UserDefaults.standard.set(filterSlideNumbers, forKey: Keys.filterSlideNumbers) }
+    }
+    var customFilterPatternsText: String {
+        didSet { UserDefaults.standard.set(customFilterPatternsText, forKey: Keys.customFilterPatterns) }
+    }
+
+    private enum Keys {
+        static let mediaDirectory = "mediaDirectoryPath"
+        static let filterStageDirections = "filterStageDirections"
+        static let filterSlideNumbers = "filterSlideNumbers"
+        static let customFilterPatterns = "customFilterPatterns"
+    }
+
+    init() {
+        let defaults = UserDefaults.standard
+        filterStageDirections = defaults.object(forKey: Keys.filterStageDirections) as? Bool ?? true
+        filterSlideNumbers = defaults.object(forKey: Keys.filterSlideNumbers) as? Bool ?? true
+        customFilterPatternsText = defaults.string(forKey: Keys.customFilterPatterns) ?? ""
+
+        if let path = defaults.string(forKey: Keys.mediaDirectory) {
+            var isDirectory: ObjCBool = false
+            if FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory), isDirectory.boolValue {
+                // Set the backing store directly — didSet doesn't fire in init,
+                // so refresh explicitly below.
+                mediaDirectory = URL(fileURLWithPath: path)
+            }
+        }
+        refreshFileLists()
+    }
 
     /// Patterns that remove entire lines when the full line matches.
     var activeFilterPatterns: [String] {
@@ -42,16 +96,6 @@ class GenerateViewModel {
     static let videoExtensions = Set(["mp4", "mov", "mkv", "webm", "m4v"])
     static let scriptExtensions = Set(["docx"])
 
-    var availableVideos: [URL] {
-        guard let dir = mediaDirectory else { return [] }
-        return Self.scanFiles(in: dir, extensions: Self.videoExtensions)
-    }
-
-    var availableScripts: [URL] {
-        guard let dir = mediaDirectory else { return [] }
-        return Self.scanFiles(in: dir, extensions: Self.scriptExtensions)
-    }
-
     var isRunning: Bool {
         if case .running = alignmentService.state { return true }
         return false
@@ -59,6 +103,23 @@ class GenerateViewModel {
 
     var canRun: Bool {
         selectedVideo != nil && selectedScript != nil && !isRunning
+    }
+
+    var canPreview: Bool {
+        selectedScript != nil && !isRunning && !isLoadingPreview
+    }
+
+    // MARK: - File selection
+
+    func refreshFileLists() {
+        guard let dir = mediaDirectory else {
+            availableVideos = []
+            availableScripts = []
+            return
+        }
+        availableVideos = Self.scanFiles(in: dir, extensions: Self.videoExtensions)
+        availableScripts = Self.scanFiles(in: dir, extensions: Self.scriptExtensions)
+        log(.app, "scanned \(dir.lastPathComponent): \(availableVideos.count) videos, \(availableScripts.count) scripts")
     }
 
     func pickMediaDirectory() {
@@ -98,6 +159,9 @@ class GenerateViewModel {
         panel.canChooseFiles = true
         panel.canChooseDirectories = false
         panel.allowsMultipleSelection = false
+        if let docx = UTType(filenameExtension: "docx") {
+            panel.allowedContentTypes = [docx]
+        }
         panel.prompt = "Select Script"
 
         if panel.runModal() == .OK {
@@ -105,10 +169,71 @@ class GenerateViewModel {
         }
     }
 
+    /// Handle files dropped onto the Generate tab: route by extension.
+    /// Returns true if anything was accepted.
+    func handleDroppedFiles(_ urls: [URL]) -> Bool {
+        var accepted = false
+        for url in urls {
+            let ext = url.pathExtension.lowercased()
+            if Self.videoExtensions.contains(ext) {
+                selectedVideo = url
+                accepted = true
+            } else if Self.scriptExtensions.contains(ext) {
+                selectedScript = url
+                accepted = true
+            }
+        }
+        if accepted {
+            log(.app, "files dropped: video=\(selectedVideo?.lastPathComponent ?? "-") script=\(selectedScript?.lastPathComponent ?? "-")")
+        }
+        return accepted
+    }
+
+    private func loadVideoDuration() {
+        videoDurationText = nil
+        guard let video = selectedVideo else { return }
+        Task { [weak self] in
+            let asset = AVURLAsset(url: video)
+            guard let duration = try? await asset.load(.duration) else { return }
+            let seconds = Int(duration.seconds.rounded())
+            guard let self, self.selectedVideo == video else { return }
+            self.videoDurationText = String(format: "%d:%02d", seconds / 60, seconds % 60)
+        }
+    }
+
+    // MARK: - Script preview
+
+    /// Run the fast extract-only pass and show the result in a sheet, so
+    /// filter patterns can be sanity-checked without a full alignment run.
+    func previewScriptExtraction() async {
+        guard let script = selectedScript else { return }
+        isLoadingPreview = true
+        defer { isLoadingPreview = false }
+
+        let stem = selectedVideo?.deletingPathExtension().lastPathComponent
+        do {
+            let result = try await alignmentService.extractScriptPreview(
+                docxURL: script,
+                videoStem: stem,
+                filterPatterns: activeFilterPatterns,
+                stripPatterns: activeStripPatterns
+            )
+            previewHeading = result.heading
+            previewLines = result.lines
+            showScriptPreview = true
+        } catch {
+            errorMessage = error.localizedDescription
+            showError = true
+        }
+    }
+
+    // MARK: - Alignment
+
     func runAlignment() async {
         guard let video = selectedVideo, let script = selectedScript else { return }
 
         errorMessage = nil
+        UserNotifier.requestAuthorizationIfNeeded()
 
         do {
             // Output directory: ./srt subfolder in media dir (or video dir)
@@ -127,24 +252,33 @@ class GenerateViewModel {
 
             // Post-process for DCMP/CEA-608 compliance: wrap to ≤32-char lines,
             // split over-long cues, and enforce minimum durations.
-            if let rawCues = try? SRTParser.parse(contentsOf: srtURL) {
+            do {
+                let rawCues = try SRTParser.parse(contentsOf: srtURL)
                 let compliant = CaptionComplianceService.makeCompliant(rawCues)
-                let serialized = SRTParser.serialize(compliant)
-                try? serialized.write(to: srtURL, atomically: true, encoding: .utf8)
+                try SRTParser.serialize(compliant).write(to: srtURL, atomically: true, encoding: .utf8)
+                log(.alignment, "compliance pass: \(rawCues.count) -> \(compliant.count) cues")
+            } catch {
+                logWarn(.alignment, "compliance post-process failed (keeping raw SRT): \(error.localizedDescription)")
             }
 
-            // Post notification so Review tab can pick it up
-            NotificationCenter.default.post(
-                name: .alignmentCompleted,
-                object: nil,
-                userInfo: ["srtURL": srtURL, "videoURL": video]
+            UserNotifier.notifyIfInBackground(
+                title: "SRT generation complete",
+                body: srtURL.lastPathComponent
             )
-
+        } catch is CancellationError {
+            // User pressed Cancel — no error UI.
         } catch {
             errorMessage = error.localizedDescription
             showError = true
-            alignmentService.state = .failed(error.localizedDescription)
+            UserNotifier.notifyIfInBackground(
+                title: "SRT generation failed",
+                body: String(error.localizedDescription.prefix(120))
+            )
         }
+    }
+
+    func cancelAlignment() {
+        alignmentService.cancel()
     }
 
     // MARK: - File Scanning
@@ -165,8 +299,4 @@ class GenerateViewModel {
         }
         return files.sorted { $0.lastPathComponent.localizedCaseInsensitiveCompare($1.lastPathComponent) == .orderedAscending }
     }
-}
-
-extension Notification.Name {
-    static let alignmentCompleted = Notification.Name("alignmentCompleted")
 }

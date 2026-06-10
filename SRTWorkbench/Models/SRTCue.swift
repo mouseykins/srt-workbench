@@ -56,15 +56,4 @@ extension SRTCue {
 
     /// Character count of the longest line.
     var maxLineLength: Int { lines.map(\.count).max() ?? 0 }
-
-    /// Number of words across all lines.
-    var wordCount: Int {
-        text.split(whereSeparator: { $0 == " " || $0 == "\n" }).count
-    }
-
-    /// Reading speed in words per minute (0 when duration is non-positive).
-    var wordsPerMinute: Double {
-        guard duration > 0 else { return 0 }
-        return Double(wordCount) / duration * 60
-    }
 }

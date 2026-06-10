@@ -6,21 +6,31 @@ struct CueEditorView: View {
     var body: some View {
         VStack(spacing: 0) {
             // Header
-            HStack {
+            HStack(spacing: 8) {
                 Text("Cues")
                     .font(.headline)
+
+                Chip(text: "\(viewModel.cues.count)", tint: .secondary)
+
                 Spacer()
-                Text("\(viewModel.cues.count) entries")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+
+                let issues = viewModel.complianceViolations.count
+                if issues > 0 {
+                    Chip(text: "\(issues) \(issues == 1 ? "issue" : "issues")",
+                         systemImage: "exclamationmark.triangle.fill",
+                         tint: .orange)
+                        .help(viewModel.complianceSummary)
+                } else if !viewModel.cues.isEmpty {
+                    Chip(text: "Compliant", systemImage: "checkmark.seal.fill", tint: .green)
+                }
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.vertical, 9)
             .background(.bar)
 
             Divider()
 
-            // Cue list
+            // Cue list — card-style rows on the recessed canvas
             ScrollViewReader { proxy in
                 List {
                     ForEach(Array(viewModel.cues.enumerated()), id: \.element.id) { index, cue in
@@ -42,14 +52,13 @@ struct CueEditorView: View {
                             onTextChanged: { text in viewModel.updateCueText(at: index, text: text) }
                         )
                         .id(cue.id)
-                        .listRowBackground(
-                            viewModel.activeCueIndex == index
-                                ? Color.accentColor.opacity(0.1)
-                                : Color.clear
-                        )
+                        .listRowSeparator(.hidden)
+                        .listRowInsets(EdgeInsets(top: 4, leading: 10, bottom: 4, trailing: 10))
                     }
                 }
                 .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+                .canvasBackground()
                 .onChange(of: viewModel.activeCueIndex) { _, newIndex in
                     if let idx = newIndex, viewModel.cues.indices.contains(idx) {
                         withAnimation(.easeInOut(duration: 0.2)) {

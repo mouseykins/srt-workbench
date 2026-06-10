@@ -1,62 +1,115 @@
 import SwiftUI
 
+enum AppScreen: String, Hashable {
+    case generate
+    case review
+}
+
 struct ContentView: View {
-    @State private var selectedTab = 0
+    @State private var screen: AppScreen = .generate
     @State private var generateVM = GenerateViewModel()
     @State private var reviewVM = ReviewViewModel()
     @State private var setupManager = SetupManager.shared
 
     var body: some View {
-        VStack(spacing: 0) {
-            Group {
-                if setupManager.stage == .ready || setupManager.isReady {
-                    TabView(selection: $selectedTab) {
-                        GenerateView(viewModel: generateVM, onComplete: { videoURL, srtURL in
-                            reviewVM.loadVideo(from: videoURL)
-                            reviewVM.loadSRT(from: srtURL)
-                            selectedTab = 1
-                        })
-                        .tabItem {
-                            Label("Generate", systemImage: "waveform")
-                        }
-                        .tag(0)
+        Group {
+            if setupManager.stage == .ready || setupManager.isReady {
+                mainInterface
+            } else {
+                FirstRunView()
+            }
+        }
+        .frame(minWidth: 1000, minHeight: 660)
+    }
 
-                        ReviewView(viewModel: reviewVM)
-                            .tabItem {
-                                Label("Review & Edit", systemImage: "play.rectangle")
-                            }
-                            .tag(1)
+    // MARK: - Main shell
+
+    private var mainInterface: some View {
+        NavigationSplitView {
+            VStack(spacing: 0) {
+                // Manual selection: button rows driving `screen` directly.
+                // (List selection / NavigationLink value-routing both fail to
+                // switch the detail pane in this NavigationSplitView setup.)
+                List {
+                    Section("Workflow") {
+                        sidebarRow(.generate, title: "Generate", icon: "waveform.badge.plus")
+                        sidebarRow(.review, title: "Review & Edit", icon: "play.rectangle.on.rectangle",
+                                   badgeCount: reviewVM.isLoaded ? reviewVM.complianceViolations.count : 0)
                     }
-                } else {
-                    FirstRunView()
+                }
+                .listStyle(.sidebar)
+
+                versionFooter
+            }
+            .navigationSplitViewColumnWidth(min: 190, ideal: 210, max: 280)
+        } detail: {
+            switch screen {
+            case .generate:
+                GenerateView(viewModel: generateVM, onComplete: { videoURL, srtURL in
+                    reviewVM.loadVideo(from: videoURL)
+                    reviewVM.loadSRT(from: srtURL)
+                    screen = .review
+                })
+                .navigationTitle("Generate")
+
+            case .review:
+                ReviewView(viewModel: reviewVM)
+                    .navigationTitle("Review & Edit")
+                    .navigationSubtitle(reviewVM.videoURL?.lastPathComponent ?? "")
+            }
+        }
+    }
+
+    // MARK: - Sidebar rows
+
+    private func sidebarRow(_ target: AppScreen, title: String, icon: String, badgeCount: Int = 0) -> some View {
+        Button {
+            screen = target
+        } label: {
+            HStack(spacing: 7) {
+                Image(systemName: icon)
+                    .foregroundStyle(screen == target ? Color.accentColor : Color.secondary)
+                    .frame(width: 18)
+                Text(title)
+                Spacer()
+                if badgeCount > 0 {
+                    Text("\(badgeCount)")
+                        .font(.caption.weight(.semibold).monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 1)
+                        .background(Capsule().fill(Color.secondary.opacity(0.18)))
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-            Divider()
-            versionFooter
+            .contentShape(Rectangle())
         }
-        .frame(minWidth: 900, minHeight: 600)
+        .buttonStyle(.plain)
+        .padding(.vertical, 3)
+        .padding(.horizontal, 4)
+        .listRowBackground(
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(screen == target ? Color.accentColor.opacity(0.22) : Color.clear)
+                .padding(.horizontal, 6)
+        )
     }
 
     // MARK: - Version Footer
 
     private var versionFooter: some View {
         HStack(spacing: 5) {
-            Spacer()
             Image(systemName: "captions.bubble")
                 .font(.caption2)
             Text("SRT Workbench \(Self.appVersionString)")
                 .font(.caption2)
+            Spacer()
         }
         .foregroundStyle(.tertiary)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 3)
-        .background(.bar)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
         .help(Self.appVersionDetail)
     }
 
-    /// Marketing version (e.g. "v1.3.0"), read from the app bundle.
+    /// Marketing version (e.g. "v2.0.0"), read from the app bundle.
     static var appVersionString: String {
         let short = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
         return "v\(short)"

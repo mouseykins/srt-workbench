@@ -10,19 +10,49 @@ Input JSON:
     "audio_path": "/path/to/audio.wav",
     "script_lines": ["Line one", "Line two", ...],
     "output_path": "/path/to/output.srt",
-    "model_path": "/path/to/model.onnx"
+    "model_path": "/path/to/model.onnx",
+    "mode": "align" | "extract"      # extract = parse .docx only, no alignment
 }
 
 Output JSON lines:
 {"type": "progress", "stage": "...", "percent": 0-100}
+{"type": "info", "words": N, "audio_seconds": S}
+{"type": "section_match", "matched": bool, "heading": "..."}
+{"type": "extract_result", "heading": "...", "lines": [...]}
 {"type": "result", "srt_path": "...", "num_cues": N}
 {"type": "error", "message": "..."}
+
+All diagnostic logging goes to stderr (captured by the Swift app's log file).
 """
 
 import json
+import math
 import os
 import re
 import sys
+import threading
+import time
+from datetime import datetime
+
+
+def log(message):
+    """Timestamped diagnostic line on stderr — captured by the app's log."""
+    ts = datetime.now().strftime("%H:%M:%S.%f")[:-3]
+    print(f"[{ts}] {message}", file=sys.stderr, flush=True)
+
+
+def log_environment():
+    """Log interpreter + package versions for remote diagnostics."""
+    log(f"python {sys.version.split()[0]} ({sys.executable})")
+    try:
+        from importlib import metadata
+        for pkg in ("ctc-forced-aligner", "python-docx", "onnxruntime", "Unidecode"):
+            try:
+                log(f"package {pkg}=={metadata.version(pkg)}")
+            except metadata.PackageNotFoundError:
+                log(f"package {pkg}: not installed")
+    except Exception as e:  # noqa: BLE001 — diagnostics must never kill the run
+        log(f"could not read package versions: {e}")
 
 
 def progress(stage, percent=0):
@@ -31,8 +61,15 @@ def progress(stage, percent=0):
     print(json.dumps(msg), flush=True)
 
 
+def info(words, audio_seconds):
+    """Send run context (script size, audio length) to the Swift app."""
+    msg = {"type": "info", "words": words, "audio_seconds": audio_seconds}
+    print(json.dumps(msg), flush=True)
+
+
 def error(message):
     """Send an error to the Swift app via stdout."""
+    log(f"ERROR: {message}")
     msg = {"type": "error", "message": message}
     print(json.dumps(msg), flush=True)
     sys.exit(1)
@@ -50,12 +87,22 @@ def section_match(matched, heading):
     print(json.dumps(msg), flush=True)
 
 
+def extract_result(heading, lines):
+    """Send the extracted script lines (extract mode) to the Swift app."""
+    msg = {"type": "extract_result", "heading": heading, "lines": lines}
+    print(json.dumps(msg), flush=True)
+
+
 def format_srt_time(seconds):
-    """Convert seconds to SRT timestamp format HH:MM:SS,mmm."""
-    h = int(seconds // 3600)
-    m = int((seconds % 3600) // 60)
-    s = int(seconds % 60)
-    ms = int(round((seconds - int(seconds)) * 1000))
+    """Convert seconds to SRT timestamp format HH:MM:SS,mmm.
+
+    Rounds to whole milliseconds FIRST so a value like 59.9996 becomes
+    00:01:00,000 rather than the invalid 00:00:59,1000.
+    """
+    total_ms = max(0, int(round(seconds * 1000)))
+    h, rem = divmod(total_ms, 3_600_000)
+    m, rem = divmod(rem, 60_000)
+    s, ms = divmod(rem, 1000)
     return f"{h:02d}:{m:02d}:{s:02d},{ms:03d}"
 
 
@@ -247,6 +294,41 @@ def _split_line_segments(line_words, line_word_ts, max_secs, max_chars):
     return segments
 
 
+def parse_script(config):
+    """Extract script lines per the config (docx or inline), emitting
+    section_match messages. Returns (matched_heading_or_None, lines)."""
+    docx_path = config.get("docx_path")
+    video_stem = config.get("video_stem")
+    filter_patterns = config.get("filter_patterns", [r"^\[.*\]$"])
+    strip_patterns = config.get("strip_patterns", [])
+
+    if not docx_path:
+        return None, config.get("script_lines", [])
+
+    if not os.path.isfile(docx_path):
+        error(f"Script file not found: {docx_path}")
+
+    log(f"parsing docx: {os.path.basename(docx_path)} "
+        f"(video_stem={video_stem!r}, {len(filter_patterns)} filters, {len(strip_patterns)} strips)")
+    try:
+        # Try section-based extraction if we have a video stem
+        if video_stem:
+            matched_heading, section_lines = extract_section_lines(
+                docx_path, video_stem, filter_patterns=filter_patterns, strip_patterns=strip_patterns
+            )
+            if section_lines is not None:
+                log(f"matched section: {matched_heading!r} ({len(section_lines)} lines)")
+                section_match(True, matched_heading)
+                return matched_heading, section_lines
+            log("no section matched — using whole document")
+            section_match(False, None)
+        return None, extract_script_lines(docx_path, filter_patterns=filter_patterns, strip_patterns=strip_patterns)
+    except SystemExit:
+        raise
+    except Exception as e:
+        error(f"Failed to parse .docx: {e}")
+
+
 def main():
     # Read input from stdin
     try:
@@ -255,45 +337,35 @@ def main():
     except Exception as e:
         error(f"Failed to parse input: {e}")
 
+    log_environment()
+
+    mode = config.get("mode", "align")
+    log(f"mode: {mode}")
+
+    # Extract-only mode: parse the .docx and return the lines — no alignment.
+    if mode == "extract":
+        heading, script_lines = parse_script(config)
+        extract_result(heading, script_lines)
+        log(f"extract complete: {len(script_lines)} lines")
+        return
+
     audio_path = config.get("audio_path")
-    docx_path = config.get("docx_path")
     output_path = config.get("output_path")
     model_path = config.get("model_path")
-    video_stem = config.get("video_stem")
-    filter_patterns = config.get("filter_patterns", [r"^\[.*\]$"])
-    strip_patterns = config.get("strip_patterns", [])
 
     if not audio_path or not output_path:
         error("Missing audio_path or output_path")
 
-    # Parse .docx to extract script lines
-    if docx_path:
-        if not os.path.isfile(docx_path):
-            error(f"Script file not found: {docx_path}")
-        try:
-            # Try section-based extraction if we have a video stem
-            if video_stem:
-                matched_heading, section_lines = extract_section_lines(
-                    docx_path, video_stem, filter_patterns=filter_patterns, strip_patterns=strip_patterns
-                )
-                if section_lines is not None:
-                    script_lines = section_lines
-                    section_match(True, matched_heading)
-                else:
-                    script_lines = extract_script_lines(docx_path, filter_patterns=filter_patterns, strip_patterns=strip_patterns)
-                    section_match(False, None)
-            else:
-                script_lines = extract_script_lines(docx_path, filter_patterns=filter_patterns, strip_patterns=strip_patterns)
-        except Exception as e:
-            error(f"Failed to parse .docx: {e}")
-    else:
-        script_lines = config.get("script_lines", [])
+    _, script_lines = parse_script(config)
 
     if not script_lines:
         error("No spoken lines found in the script")
 
     if not os.path.isfile(audio_path):
         error(f"Audio file not found: {audio_path}")
+
+    total_script_words = sum(len(line.split()) for line in script_lines)
+    log(f"script: {len(script_lines)} lines, {total_script_words} words")
 
     # Set model path for ctc_forced_aligner if provided
     if model_path:
@@ -307,11 +379,16 @@ def main():
             os.makedirs(default_model_dir, exist_ok=True)
             try:
                 os.symlink(model_path, default_model_path)
-            except OSError:
-                pass  # May already exist or permission issue
+                log(f"symlinked model: {model_path} -> {default_model_path}")
+            except OSError as e:
+                # If this fails AND no model exists at the default path, the
+                # aligner library may silently re-download ~1.2 GB.
+                log(f"WARNING: model symlink failed ({e}); "
+                    f"aligner may download its own copy to {default_model_dir}")
 
     # Import alignment libraries
     progress("Importing alignment libraries...", 5)
+    log("importing ctc_forced_aligner...")
     try:
         from ctc_forced_aligner import (
             AlignmentSingleton,
@@ -329,10 +406,13 @@ def main():
     full_text = " ".join(script_lines)
 
     progress("Loading alignment model...", 10)
+    log("loading alignment model...")
+    t0 = time.time()
     try:
         aligner = AlignmentSingleton()
     except Exception as e:
         error(f"Failed to load alignment model: {e}")
+    log(f"model loaded in {time.time() - t0:.1f}s")
 
     progress("Loading audio...", 20)
     try:
@@ -340,13 +420,41 @@ def main():
     except Exception as e:
         error(f"Failed to load audio: {e}")
 
-    progress("Generating emissions...", 30)
+    audio_seconds = len(audio_waveform) / 16000.0
+    log(f"audio: {audio_seconds:.1f}s at 16kHz")
+    info(total_script_words, audio_seconds)
+
+    # Emissions (model inference over the whole audio) dominate the run time
+    # and the library offers no progress callback, so a heartbeat thread
+    # estimates progress from elapsed time: asymptotic toward 50%, never past.
+    progress("Transcribing audio (model inference)...", 30)
+    log("generating emissions...")
+    t0 = time.time()
+    stop_heartbeat = threading.Event()
+
+    def heartbeat():
+        # Time constant scaled to audio length: longer audio = slower ramp.
+        # Calibrated against Apple-silicon runs (~0.13s inference per 1s of
+        # audio) so the bar sits near the top of the band as inference ends.
+        tau = max(5.0, audio_seconds * 0.12)
+        while not stop_heartbeat.wait(2.0):
+            elapsed = time.time() - t0
+            est = 30 + 20 * (1 - math.exp(-elapsed / tau))
+            progress("Transcribing audio (model inference)...", round(min(est, 49.5), 1))
+
+    heartbeat_thread = threading.Thread(target=heartbeat, daemon=True)
+    heartbeat_thread.start()
     try:
         emissions, stride = generate_emissions(
             aligner.alignment_model, audio_waveform, batch_size=16
         )
     except Exception as e:
+        stop_heartbeat.set()
         error(f"Failed to generate emissions: {e}")
+    finally:
+        stop_heartbeat.set()
+        heartbeat_thread.join(timeout=3)
+    log(f"emissions generated in {time.time() - t0:.1f}s")
 
     progress("Preprocessing text...", 50)
     try:
@@ -370,6 +478,13 @@ def main():
         word_timestamps = postprocess_results(text_starred, spans, stride, scores)
     except Exception as e:
         error(f"Failed to post-process: {e}")
+
+    # The line-to-timestamp mapping below assumes one timestamp per
+    # whitespace-separated word; if tokenization disagreed, timing drifts.
+    if len(word_timestamps) != total_script_words:
+        log(f"WARNING: word count mismatch — script has {total_script_words} words "
+            f"but aligner returned {len(word_timestamps)} timestamps; "
+            f"cue timing may drift toward the end of the video")
 
     progress("Generating SRT file...", 90)
 
@@ -431,6 +546,7 @@ def main():
         error(f"Failed to write SRT file: {e}")
 
     progress("Complete", 100)
+    log(f"wrote {len(srt_entries)} cues to {output_path}")
     result(output_path, len(srt_entries))
 
 

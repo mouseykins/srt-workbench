@@ -2,127 +2,196 @@ import SwiftUI
 
 struct ReviewView: View {
     @Bindable var viewModel: ReviewViewModel
+    @State private var showIssuesPopover = false
 
     var body: some View {
         VStack(spacing: 0) {
-            // Toolbar area
-            HStack(spacing: 12) {
-                Button("Video...") { viewModel.pickVideoFile() }
-                Button("SRT...") { viewModel.pickSRTFile() }
-
-                Spacer()
-
-                if viewModel.document.isDirty {
-                    Text("Unsaved changes")
-                        .font(.callout)
-                        .foregroundStyle(.orange)
-                } else if !viewModel.saveStatusMessage.isEmpty {
-                    Text(viewModel.saveStatusMessage)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
-
-                if viewModel.isLoaded {
-                    let issues = viewModel.complianceViolations
-                    if issues.isEmpty {
-                        Label("ADA compliant", systemImage: "checkmark.seal.fill")
-                            .font(.callout)
-                            .foregroundStyle(.green)
-                            .help("All cues meet the 32-char / 2-line / duration limits")
-                    } else {
-                        Label("\(issues.count) compliance \(issues.count == 1 ? "issue" : "issues")",
-                              systemImage: "exclamationmark.triangle.fill")
-                            .font(.callout)
-                            .foregroundStyle(.yellow)
-                            .help(viewModel.complianceSummary)
-                    }
-
-                    Button(action: { viewModel.reflowForCompliance() }) {
-                        Label("Reflow", systemImage: "text.alignleft")
-                    }
-                    .buttonStyle(.bordered)
-                    .help("Re-wrap all cues to 32-char lines for ADA/DCMP compliance")
-                }
-
-                Button(action: { viewModel.togglePlaybackSpeed() }) {
-                    Text(viewModel.playbackSpeed == 1.0 ? "1x" : "2x")
-                        .font(.callout.weight(.medium).monospaced())
-                        .frame(width: 32)
-                }
-                .buttonStyle(.bordered)
-                .help("Toggle playback speed (\u{2318}D)")
-
-                Button(action: { viewModel.save() }) {
-                    Label("Save SRT", systemImage: "square.and.arrow.down")
-                }
-                .keyboardShortcut("s", modifiers: .command)
-                .disabled(!viewModel.document.isDirty)
-            }
-            .padding(.horizontal)
-            .padding(.vertical, 8)
-            .background(.bar)
-
-            Divider()
-
             if viewModel.isLoaded {
                 HSplitView {
-                    // Video player (left)
-                    VideoPlayerView(
-                        videoURL: viewModel.videoURL!,
-                        captionText: viewModel.activeCueText,
-                        onTimeUpdate: { time in
-                            viewModel.currentTime = time
-                        }
-                    )
-                    .frame(minWidth: 400)
+                    // Video player (left), framed on the canvas
+                    VStack {
+                        VideoPlayerView(
+                            videoURL: viewModel.videoURL!,
+                            captionText: viewModel.activeCueText,
+                            onTimeUpdate: { time in
+                                viewModel.currentTime = time
+                            }
+                        )
+                        .background(Color.black)
+                        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .strokeBorder(.quaternary, lineWidth: 1)
+                        )
+                        .padding(12)
+                    }
+                    .frame(minWidth: 420)
+                    .canvasBackground()
 
                     // Cue editor (right)
                     CueEditorView(viewModel: viewModel)
-                        .frame(minWidth: 300, idealWidth: 400)
+                        .frame(minWidth: 320, idealWidth: 420)
                 }
 
-                // Keyboard shortcut hint bar
+                // Keyboard shortcut hints + save status
                 Divider()
-                HStack(spacing: 20) {
+                HStack(spacing: 18) {
                     shortcutHint("Play / Pause", keys: "\u{2318}\u{23CE}")
                     shortcutHint("Back 5s", keys: "\u{2318}\u{2190}")
                     shortcutHint("Forward 5s", keys: "\u{2318}\u{2192}")
-                    shortcutHint("Speed 1x/2x", keys: "\u{2318}D")
+                    shortcutHint("Speed", keys: "\u{2318}D")
                     shortcutHint("Save", keys: "\u{2318}S")
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 6)
-                .background(.bar)
-            } else {
-                VStack(spacing: 16) {
-                    Image(systemName: "play.rectangle")
-                        .font(.system(size: 48))
-                        .foregroundStyle(.tertiary)
-                    Text("Select a video and SRT file to begin")
-                        .font(.title3)
-                        .foregroundStyle(.secondary)
-                    HStack(spacing: 12) {
-                        Button("Choose Video...") { viewModel.pickVideoFile() }
-                        Button("Choose SRT...") { viewModel.pickSRTFile() }
+
+                    Spacer()
+
+                    if viewModel.document.isDirty {
+                        Chip(text: "Unsaved changes", systemImage: "circle.fill", tint: .orange)
+                    } else if !viewModel.saveStatusMessage.isEmpty {
+                        Text(viewModel.saveStatusMessage)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 7)
+                .background(.bar)
+            } else {
+                ContentUnavailableView {
+                    Label("Nothing Loaded", systemImage: "play.rectangle.on.rectangle")
+                } description: {
+                    Text("Drop a video and SRT file anywhere in this window,\nor choose them manually.")
+                } actions: {
+                    HStack(spacing: 12) {
+                        Button("Choose Video…") { viewModel.pickVideoFile() }
+                        Button("Choose SRT…") { viewModel.pickSRTFile() }
+                    }
+                }
+                .canvasBackground()
+            }
+        }
+        .dropDestination(for: URL.self) { urls, _ in
+            handleDrop(urls)
+        }
+        .toolbar {
+            ToolbarItemGroup {
+                Button {
+                    viewModel.pickVideoFile()
+                } label: {
+                    Label("Video", systemImage: "film")
+                        .labelStyle(.titleAndIcon)
+                }
+                .help("Choose a video file")
+
+                Button {
+                    viewModel.pickSRTFile()
+                } label: {
+                    Label("SRT", systemImage: "captions.bubble")
+                        .labelStyle(.titleAndIcon)
+                }
+                .help("Choose an SRT file")
             }
 
-            // Hidden buttons to wire up keyboard shortcuts
-            hiddenShortcutButtons
+            ToolbarItemGroup {
+                if viewModel.isLoaded {
+                    complianceBadge
+
+                    Button {
+                        viewModel.reflowForCompliance()
+                    } label: {
+                        Label("Reflow", systemImage: "text.alignleft")
+                            .labelStyle(.titleAndIcon)
+                    }
+                    .help("Re-wrap all cues to 32-char lines and split over-long cues for ADA/DCMP compliance")
+                }
+
+                Button {
+                    viewModel.togglePlaybackSpeed()
+                } label: {
+                    Text(viewModel.playbackSpeed == 1.0 ? "1x" : "2x")
+                        .font(.callout.weight(.medium).monospaced())
+                        .frame(width: 28)
+                }
+                .help("Toggle playback speed (\u{2318}D)")
+
+                Button {
+                    viewModel.save()
+                } label: {
+                    Label("Save", systemImage: "square.and.arrow.down")
+                        .labelStyle(.titleAndIcon)
+                }
+                .disabled(!viewModel.document.isDirty)
+                .help("Save the SRT file (\u{2318}S)")
+            }
         }
         .alert("Save Error", isPresented: $viewModel.showSaveError) {
             Button("OK") {}
         } message: {
             Text(viewModel.saveErrorMessage)
         }
-        .onReceive(NotificationCenter.default.publisher(for: .alignmentCompleted)) { notification in
-            if let srtURL = notification.userInfo?["srtURL"] as? URL {
-                viewModel.loadSRT(from: srtURL)
+        // Menu-bar commands (File > Save SRT, Playback > Speed) arrive as
+        // notifications so the App scene doesn't need a view-model reference.
+        .onReceive(NotificationCenter.default.publisher(for: .saveSRTRequested)) { _ in
+            if viewModel.document.isDirty {
+                viewModel.save()
             }
-            if let videoURL = notification.userInfo?["videoURL"] as? URL {
-                viewModel.loadVideo(from: videoURL)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .togglePlaybackSpeedRequested)) { _ in
+            viewModel.togglePlaybackSpeed()
+        }
+    }
+
+    // MARK: - Drop handling
+
+    private func handleDrop(_ urls: [URL]) -> Bool {
+        var accepted = false
+        for url in urls {
+            let ext = url.pathExtension.lowercased()
+            if GenerateViewModel.videoExtensions.contains(ext) {
+                viewModel.loadVideo(from: url)
+                accepted = true
+            } else if ext == "srt" {
+                viewModel.loadSRT(from: url)
+                accepted = true
+            }
+        }
+        return accepted
+    }
+
+    // MARK: - Compliance badge
+
+    @ViewBuilder
+    private var complianceBadge: some View {
+        let issues = viewModel.complianceViolations
+        if issues.isEmpty {
+            Label("ADA compliant", systemImage: "checkmark.seal.fill")
+                .labelStyle(.titleAndIcon)
+                .font(.callout)
+                .foregroundStyle(.green)
+                .help("All cues fit 2 lines of 32 characters")
+        } else {
+            Button {
+                showIssuesPopover.toggle()
+            } label: {
+                Label("\(issues.count) \(issues.count == 1 ? "issue" : "issues")",
+                      systemImage: "exclamationmark.triangle.fill")
+                    .labelStyle(.titleAndIcon)
+                    .font(.callout)
+                    .foregroundStyle(.yellow)
+            }
+            .help("Show formatting issues")
+            .popover(isPresented: $showIssuesPopover, arrowEdge: .bottom) {
+                ComplianceIssuesPopover(
+                    violations: issues,
+                    onJump: { cueIndex in
+                        if let time = viewModel.jumpToCue(at: cueIndex) {
+                            NotificationCenter.default.post(
+                                name: .seekToTime,
+                                object: nil,
+                                userInfo: ["time": time]
+                            )
+                        }
+                    }
+                )
             }
         }
     }
@@ -130,53 +199,86 @@ struct ReviewView: View {
     // MARK: - Shortcut Hint
 
     private func shortcutHint(_ label: String, keys: String) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 5) {
             Text(keys)
-                .font(.callout.monospaced().weight(.medium))
-                .padding(.horizontal, 6)
-                .padding(.vertical, 3)
-                .background(Color.secondary.opacity(0.15))
+                .font(.caption.monospaced().weight(.medium))
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(Color.secondary.opacity(0.14))
                 .clipShape(RoundedRectangle(cornerRadius: 4))
             Text(label)
-                .font(.callout)
+                .font(.caption)
                 .foregroundStyle(.secondary)
         }
     }
+}
 
-    // MARK: - Hidden Shortcut Buttons
+// MARK: - Compliance issues popover
 
-    @ViewBuilder
-    private var hiddenShortcutButtons: some View {
-        // Cmd+Return — Play/Pause
-        Button("") {
-            NotificationCenter.default.post(name: .togglePlayback, object: nil)
+/// Lists each formatting violation with a jump button. Stays open while
+/// stepping through issues; the video seeks and the cue list follows.
+struct ComplianceIssuesPopover: View {
+    let violations: [ComplianceViolation]
+    let onJump: (Int) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("Formatting Issues")
+                    .font(.headline)
+                Spacer()
+                Chip(text: "\(violations.count)", tint: .orange)
+            }
+            .padding(12)
+
+            Divider()
+
+            ScrollView {
+                VStack(spacing: 0) {
+                    ForEach(violations) { violation in
+                        HStack(spacing: 8) {
+                            Text("Cue \(violation.cueIndex + 1)")
+                                .font(.caption.weight(.semibold).monospacedDigit())
+                                .foregroundStyle(.secondary)
+                                .frame(width: 58, alignment: .leading)
+
+                            Text(violation.message)
+                                .font(.callout)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+
+                            Spacer()
+
+                            Button {
+                                onJump(violation.cueIndex)
+                            } label: {
+                                Image(systemName: "play.circle")
+                            }
+                            .buttonStyle(.borderless)
+                            .help("Jump the video to this cue")
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+
+                        Divider()
+                            .padding(.leading, 12)
+                    }
+                }
+            }
+            .frame(maxHeight: 280)
+
+            Divider()
+
+            Text("Reflow fixes these automatically")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(10)
         }
-        .keyboardShortcut(.return, modifiers: .command)
-        .frame(width: 0, height: 0)
-        .opacity(0)
-
-        // Cmd+Left — Skip back 5s
-        Button("") {
-            NotificationCenter.default.post(name: .skipBackward, object: nil)
-        }
-        .keyboardShortcut(.leftArrow, modifiers: .command)
-        .frame(width: 0, height: 0)
-        .opacity(0)
-
-        // Cmd+Right — Skip forward 5s
-        Button("") {
-            NotificationCenter.default.post(name: .skipForward, object: nil)
-        }
-        .keyboardShortcut(.rightArrow, modifiers: .command)
-        .frame(width: 0, height: 0)
-        .opacity(0)
-
-        // Cmd+D — Toggle playback speed
-        Button("") {
-            viewModel.togglePlaybackSpeed()
-        }
-        .keyboardShortcut("d", modifiers: .command)
-        .frame(width: 0, height: 0)
-        .opacity(0)
+        .frame(width: 340)
     }
+}
+
+extension Notification.Name {
+    static let saveSRTRequested = Notification.Name("saveSRTRequested")
+    static let togglePlaybackSpeedRequested = Notification.Name("togglePlaybackSpeedRequested")
 }

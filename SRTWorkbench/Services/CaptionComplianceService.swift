@@ -1,16 +1,17 @@
 import Foundation
 
-/// Transforms and validates cues against DCMP / CEA-608 caption standards.
+/// Transforms and validates cue text against DCMP / CEA-608 formatting limits.
 ///
 /// `makeCompliant` rewraps cue text into ≤2 lines of ≤32 chars, splitting a cue
-/// into several when its text is too long for one cue, and enforces the minimum
-/// on-screen duration. `validate` reports issues without mutating anything.
+/// into several when its text is too long for one cue. `validate` reports
+/// issues without mutating anything. Timing (duration, reading speed) is
+/// deliberately not validated — it follows from the speaker's pace.
 enum CaptionComplianceService {
 
     // MARK: - Transformation
 
-    /// Return a compliant copy of `cues`: rewrapped lines, split over-long cues,
-    /// and minimum durations enforced.
+    /// Return a compliant copy of `cues`: rewrapped lines, with over-long
+    /// cues split across multiple cues (time divided proportionally to text).
     static func makeCompliant(_ cues: [SRTCue]) -> [SRTCue] {
         var result: [SRTCue] = []
 
@@ -33,13 +34,12 @@ enum CaptionComplianceService {
             }
         }
 
-        enforceMinDuration(&result)
         return result
     }
 
     // MARK: - Validation
 
-    /// Report all compliance violations in `cues` without changing them.
+    /// Report all formatting violations in `cues` without changing them.
     static func validate(_ cues: [SRTCue]) -> [ComplianceViolation] {
         var violations: [ComplianceViolation] = []
 
@@ -51,17 +51,6 @@ enum CaptionComplianceService {
             }
             for (li, line) in lines.enumerated() where line.count > CaptionCompliance.maxCharsPerLine {
                 violations.append(ComplianceViolation(cueIndex: i, kind: .lineTooLong(line: li, charCount: line.count)))
-            }
-
-            let duration = cue.duration
-            if duration < CaptionCompliance.minDuration {
-                violations.append(ComplianceViolation(cueIndex: i, kind: .durationTooShort(duration: duration)))
-            } else if duration > CaptionCompliance.maxDuration {
-                violations.append(ComplianceViolation(cueIndex: i, kind: .durationTooLong(duration: duration)))
-            }
-
-            if cue.wordsPerMinute > CaptionCompliance.maxWPM {
-                violations.append(ComplianceViolation(cueIndex: i, kind: .readingSpeedTooFast(wpm: cue.wordsPerMinute)))
             }
         }
 
@@ -107,20 +96,6 @@ enum CaptionComplianceService {
             subCues.append(SRTCue(startTime: start, endTime: end, text: wrap(chunk)))
         }
         return subCues
-    }
-
-    /// Extend any sub-minimum-duration cue up to the floor, without overlapping
-    /// the cue that follows.
-    private static func enforceMinDuration(_ cues: inout [SRTCue]) {
-        for i in cues.indices where cues[i].duration < CaptionCompliance.minDuration {
-            var newEnd = cues[i].startTime + CaptionCompliance.minDuration
-            if i + 1 < cues.count {
-                newEnd = min(newEnd, cues[i + 1].startTime)
-            }
-            if newEnd > cues[i].endTime {
-                cues[i].endTime = newEnd
-            }
-        }
     }
 
     // MARK: - Text helpers

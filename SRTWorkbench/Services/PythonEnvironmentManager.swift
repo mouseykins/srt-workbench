@@ -64,6 +64,22 @@ class PythonEnvironmentManager {
         pythonURL != nil
     }
 
+    /// Sentinel file written only after dependencies were installed AND
+    /// verified. An interrupted first-run setup (user quit mid-pip-install)
+    /// leaves a venv whose python3 binary exists but whose packages are
+    /// broken — the sentinel's absence detects exactly that.
+    var setupSentinelURL: URL {
+        appSupportURL.appendingPathComponent("python/.setup-complete")
+    }
+
+    /// True when the Python environment finished a verified setup.
+    var isSetupComplete: Bool {
+        guard let url = pythonURL else { return false }
+        // A Python bundled inside the .app ships pre-installed — no sentinel.
+        if url.path.contains(".app/") { return true }
+        return FileManager.default.fileExists(atPath: setupSentinelURL.path)
+    }
+
     /// Human-readable description of where Python was found
     var pythonLocationDescription: String {
         guard let url = pythonURL else { return "Not found" }

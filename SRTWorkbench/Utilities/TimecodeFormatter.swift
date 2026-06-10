@@ -1,13 +1,15 @@
 import Foundation
 
 enum TimecodeFormatter {
-    /// Convert seconds to SRT timecode "HH:MM:SS,mmm"
+    /// Convert seconds to SRT timecode "HH:MM:SS,mmm".
+    /// Rounds to whole milliseconds first so 59.9996 becomes "00:01:00,000"
+    /// rather than the invalid "00:00:59,1000".
     static func string(from seconds: TimeInterval) -> String {
-        let totalSeconds = max(0, seconds)
-        let h = Int(totalSeconds / 3600)
-        let m = Int(totalSeconds.truncatingRemainder(dividingBy: 3600) / 60)
-        let s = Int(totalSeconds.truncatingRemainder(dividingBy: 60))
-        let ms = Int(((totalSeconds - totalSeconds.rounded(.down)) * 1000).rounded())
+        let totalMs = max(0, Int((seconds * 1000).rounded()))
+        let h = totalMs / 3_600_000
+        let m = (totalMs % 3_600_000) / 60_000
+        let s = (totalMs % 60_000) / 1000
+        let ms = totalMs % 1000
         return String(format: "%02d:%02d:%02d,%03d", h, m, s, ms)
     }
 

@@ -6,11 +6,14 @@ Unlike speech-to-text transcription, this approach uses your original script as 
 
 ## Features
 
-- **Generate tab** — Pick a video and .docx script, run alignment, get a timed SRT file
+- **Generate tab** — Pick a video and .docx script (or drag & drop them), run alignment, get a timed SRT file
+- **Script preview** — See exactly which lines will be aligned (and which section matched) before a long run
+- **Live progress** — Determinate progress bar, stage text, elapsed time, word/audio stats, Dock badge, and a Cancel button; a notification fires when a run finishes in the background
 - **Review tab** — Play video with caption overlay, edit cue timecodes and text, save changes
-- **2x playback speed** — Toggle with toolbar button or keyboard shortcut
-- **Checklist progress** — Visual step-by-step progress during alignment
-- **Auto-setup** — First launch creates a Python environment and downloads the alignment model automatically
+- **ADA/DCMP formatting compliance** — Clickable issues badge with jump-to-cue, plus one-click Reflow (32-char lines, 2-line cues)
+- **2x playback speed** — Toggle with toolbar button, menu, or keyboard shortcut
+- **Auto-setup** — First launch creates a Python environment and downloads the alignment model automatically, with resume support for interrupted downloads
+- **Diagnostics** — Rotating log file in `~/Library/Logs/SRT Workbench/`, plus Help → Copy Diagnostics for one-paste bug reports
 
 ## Requirements
 
@@ -54,11 +57,14 @@ This only happens once. Subsequent launches skip straight to the app.
 
 ### Generate Tab
 
-1. Choose a media directory (or pick files individually)
+1. Choose a media directory (or pick files individually, or drag & drop them onto the window)
 2. Select a video file (.mp4, .mov, .mkv, .webm, .m4v)
 3. Select a script file (.docx) — stage directions in [square brackets] are automatically filtered out
-4. Click **Run Alignment**
-5. The generated SRT file is saved to an `srt/` subfolder in the media directory
+4. Optionally click **Preview Extraction** to check the filtered script lines and section matching
+5. Click **Run Alignment** (cancel any time; progress, stage, and elapsed time are shown live)
+6. The generated SRT file is saved to an `srt/` subfolder in the media directory
+
+The selected directory and filter settings are remembered between launches.
 
 ### Review Tab
 
@@ -77,6 +83,12 @@ After generation, the Review tab loads automatically with the video and SRT side
 | ⌘ → | Skip forward 5 seconds |
 | ⌘ D | Toggle 1x / 2x speed |
 | ⌘ S | Save SRT file |
+
+## Troubleshooting
+
+- The app writes a rotating plain-text log to `~/Library/Logs/SRT Workbench/` (Help → Open Log Folder).
+- **Help → Copy Diagnostics** copies a full report (app/macOS/Python versions, installed packages, model status, recent log lines) to the clipboard — paste it into an email or issue.
+- If setup fails partway (e.g. the app was quit during dependency install), relaunching repairs the environment automatically; interrupted model downloads resume where they stopped.
 
 ## Architecture
 
